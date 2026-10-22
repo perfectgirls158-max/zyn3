@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZYN Real-Time License Cloud Activator & Live Stream Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --primary: #0f172a;
+            --primary-hover: #1e293b;
+            --accent: #4f46e5;
+            --accent-light: #eef2ff;
+            --success: #16a34a;
+            --success-bg: #f0fdf4;
+            --danger: #dc2626;
+            --danger-bg: #fef2f2;
+            --warning: #d97706;
+            --warning-bg: #fffbeb;
+            --card-border: #e2e8f0;
+            --bg-page: #f8fafc;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-page);
+            color: #0f172a;
+            min-height: 100vh;
+            padding: 28px 24px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Top Bar */
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .brand-section {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            background: #ffffff;
+            border: 1px solid var(--card-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+        }
+
+        .brand-title h1 {
+            font-size: 21px;
+            font-weight: 800;
+            letter-spacing: -0.4px;
+            color: #0f172a;
+            line-height: 1.2;
+        }
+
+        .brand-meta-pills {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .cloud-status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #ecfdf5;
+            border: 1px solid #d1fae5;
+            color: #059669;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .live-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulseDot 1.8s infinite;
+        }
+
+        @keyframes pulseDot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.4); }
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            border: none;
+            border-radius: 11px;
+            padding: 9px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.15);
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-outline {
+            background: #ffffff;
+            border: 1px solid var(--card-border);
+            color: #475569;
+        }
+
+        .btn-outline:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
+        /* 5 Stats Cards Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: #ffffff;
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            padding: 18px 20px;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .stat-info {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .stat-label {
+            font-size: 10.5px;
+            font-weight: 800;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-val {
+            font-size: 26px;
+            font-weight: 800;
+            color: #0f172a;
+            line-height: 1.1;
+        }
+
+        .stat-sub {
+            font-size: 11px;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        .stat-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .icon-blue   { background: #eef2ff; color: #4f46e5; }
+        .icon-green  { background: #ecfdf5; color: #10b981; }
+        .icon-red    { background: #fef2f2; color: #ef4444; }
+        .icon-purple { background: #faf5ff; color: #9333ea; }
+        .icon-amber  { background: #fffbeb; color: #d97706; }
+
+        /* Main Card */
+        .main-card {
+            background: #ffffff;
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            box-shadow: 0 4px 20px -8px rgba(15, 23, 42, 0.05);
+            overflow: hidden;
+        }
+
+        /* Filter Tabs Row */
+        .filter-nav {
+            display: flex;
+            align-items: center;
+            padding: 8px 16px;
+            background: #f8fafc;
+            border-bottom: 1px solid var(--card-border);
+            overflow-x: auto;
+            gap: 6px;
+        }
+
+        .filter-tab {
+            background: none;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 9px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .filter-tab:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        .filter-tab.active {
+            background: #ffffff;
+            color: #0f172a;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        }
+
+        .tab-badge {
+            background: #e2e8f0;
+            color: #475569;
+            padding: 1px 6px;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 800;
+        }
+
+        .filter-tab.active .tab-badge {
+            background: #0f172a;
+            color: #ffffff;
+        }
+
+        /* Toolbar Row */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid #f1f5f9;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .toolbar-info {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #475569;
+        }
+
+        .search-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            color: #94a3b8;
+            pointer-events: none;
+        }
+
+        .search-input {
+            height: 38px;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 0 14px 0 34px;
+            font-size: 13px;
+            outline: none;
+            width: 290px;
+            transition: all 0.15s ease;
+            font-family: inherit;
+        }
+
+        .search-input:focus {
+            border-color: #0f172a;
+            box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+        }
+
+        /* Table */
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 12.5px;
+        }
+
+        th {
+            background: #f8fafc;
+            color: #475569;
+            font-size: 10.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            padding: 12px 18px;
+            border-bottom: 1px solid var(--card-border);
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 14px 18px;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: #fbfcfe;
+        }
+
+        /* Cell Details */
+        .cust-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .cust-name {
+            font-weight: 800;
+            color: #0f172a;
+            font-size: 13.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .cust-notes {
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .code-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 800;
+            color: #4f46e5;
+            background: #eef2ff;
+            border: 1px solid #e0e7ff;
+            padding: 2px 8px;
+            border-radius: 6px;
+            width: fit-content;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .code-pill:hover {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        /* PC Hardware Identity */
+        .pc-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .pc-id-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            color: #1e293b;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 3px 7px;
+            border-radius: 6px;
+            width: fit-content;
+        }
+
+        .pc-specs-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10.5px;
+            color: #64748b;
+        }
+
+        .lock-pill {
+            font-size: 9.5px;
+            font-weight: 800;
+            padding: 1px 6px;
+            border-radius: 9999px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .lock-pill.locked {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .lock-pill.free {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        /* Live Stream Status Cell */
+        .stream-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .live-btn-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 4px 9px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 800;
+            text-decoration: none;
+            width: fit-content;
+            transition: all 0.15s ease;
+        }
+
+        .live-btn-tag:hover {
+            background: #fca5a5;
+            color: #991b1b;
+        }
+
+        .live-pulse {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #dc2626;
+            animation: pulseRed 1.3s infinite;
+        }
+
+        @keyframes pulseRed {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.4; }
+        }
+
+        .idle-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            color: #94a3b8;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            width: fit-content;
+        }
+
+        .stream-count-sub {
+            font-size: 10.5px;
+            color: #64748b;
+        }
+
+        /* History Tags */
+        .history-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            max-width: 220px;
+        }
+
+        .user-tag {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            color: #334155;
+            padding: 2px 6px;
+            border-radius: 5px;
+            font-size: 10.5px;
+            font-weight: 700;
+        }
+
+        /* Validity & Expiration */
+        .validity-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .validity-badge {
+            font-size: 11px;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 6px;
+            width: fit-content;
+        }
+
+        .validity-badge.active   { background: #dcfce7; color: #15803d; }
+        .validity-badge.expired  { background: #fee2e2; color: #dc2626; }
+        .validity-badge.lifetime { background: #eef2ff; color: #4338ca; }
+
+        .date-sub {
+            font-size: 10.5px;
+            color: #64748b;
+        }
+
+        /* Last Seen */
+        .online-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 11.5px;
+        }
+
+        .online-status {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: 700;
+        }
+
+        .dot-green {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #10b981;
+        }
+
+        .dot-gray {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #cbd5e1;
+        }
+
+        .ip-sub {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #94a3b8;
+        }
+
+        /* Action Buttons */
+        .actions-flex {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .btn-sm {
+            border: none;
+            padding: 5px 9px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-ban {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+        .btn-ban:hover { background: #fca5a5; }
+
+        .btn-unban {
+            background: #dcfce7;
+            color: #15803d;
+        }
+        .btn-unban:hover { background: #bbf7d0; }
+
+        .btn-unlock-hw {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+        }
+        .btn-unlock-hw:hover { background: #e2e8f0; color: #0f172a; }
+
+        .btn-extend {
+            background: #eef2ff;
+            color: #4f46e5;
+        }
+        .btn-extend:hover { background: #e0e7ff; }
+
+        .btn-edit {
+            background: #f1f5f9;
+            color: #475569;
+        }
+        .btn-edit:hover { background: #e2e8f0; color: #0f172a; }
+
+        .btn-icon-del {
+            background: transparent;
+            color: #94a3b8;
+            padding: 5px;
+        }
+        .btn-icon-del:hover { color: #dc2626; }
+
+        /* Modals */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-box {
+            background: #ffffff;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 20px 45px -15px rgba(15, 23, 42, 0.2);
+            padding: 28px;
+            transform: translateY(12px);
+            transition: transform 0.2s ease;
+        }
+
+        .modal-overlay.open .modal-box {
+            transform: translateY(0);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 4px;
+        }
+
+        .modal-sub {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 18px;
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 800;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .form-control {
+            width: 100%;
+            height: 42px;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 0 12px;
+            font-size: 13.5px;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .form-control:focus {
+            border-color: #0f172a;
+        }
+
+        .modal-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 22px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 50px 20px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Top Navigation Bar -->
+        <header class="top-bar">
+            <div class="brand-section">
+                <div class="brand-logo">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                </div>
+                <div class="brand-title">
+                    <h1>ZYN License Cloud Control</h1>
+                    <div class="brand-meta-pills">
+                        <span class="cloud-status-pill">
+                            <span class="live-dot"></span>
+                            <span>Real-Time Cloud Sync Active</span>
+                        </span>
+                        <span id="dbStatusBadge" class="cloud-status-pill" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); color: #059669;">
+                            <span class="live-dot" id="dbStatusDot" style="background: #10b981;"></span>
+                            <span id="dbStatusText">Checking Database...</span>
+                        </span>
+                        <span style="font-size: 11px; color: #94a3b8;">• v3.6.0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <input type="file" id="backupFileInput" accept=".json" style="display:none;" onchange="handleBackupFileSelected(event)">
+                <button type="button" class="btn btn-outline" onclick="exportDatabaseBackup()" title="I-download ang backup ng lahat ng licenses sa iyong computer">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    <span>Backup</span>
+                </button>
+                <button type="button" class="btn btn-outline" onclick="triggerImportBackup()" title="I-upload ang JSON backup sakaling nag-reset ang cloud server">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <span>Restore</span>
+                </button>
+                <button type="button" class="btn btn-outline" onclick="fetchLicenses()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                    <span>Refresh</span>
+                </button>
+                <button type="button" class="btn btn-primary" onclick="openCreateModal()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    <span>Gumawa ng 8-Digit Code</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- 5 KPI Stats Cards -->
+        <section class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-info">
+                    <span class="stat-label">Total Licenses</span>
+                    <span class="stat-val" id="statTotal">0</span>
+                    <span class="stat-sub" id="statTotalSub">0 active licenses</span>
+                </div>
+                <div class="stat-icon icon-blue">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-info">
+                    <span class="stat-label">Naka-Lock na Computers</span>
+                    <span class="stat-val" id="statBound">0</span>
+                    <span class="stat-sub">Hardware bound PCs</span>
+                </div>
+                <div class="stat-icon icon-green">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-info">
+                    <span class="stat-label">Streaming Live (NOW)</span>
+                    <span class="stat-val" id="statLive" style="color: #dc2626;">0</span>
+                    <span class="stat-sub">Naka-connect sa TikTok Live</span>
+                </div>
+                <div class="stat-icon icon-red">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="2"></circle>
+                        <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"></path>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-info">
+                    <span class="stat-label">Tracked Stream Handles</span>
+                    <span class="stat-val" id="statHandles">0</span>
+                    <span class="stat-sub">All TikTok usernames recorded</span>
+                </div>
+                <div class="stat-icon icon-purple">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-info">
+                    <span class="stat-label">Banned / Disabled</span>
+                    <span class="stat-val" id="statBanned" style="color: #64748b;">0</span>
+                    <span class="stat-sub">Locked out from app</span>
+                </div>
+                <div class="stat-icon icon-amber">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                    </svg>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Data Card -->
+        <main class="main-card">
+            <!-- Filter Tabs -->
+            <div class="filter-nav">
+                <button type="button" class="filter-tab active" data-filter="all" onclick="setFilter('all')">
+                    <span>Lahat (All)</span>
+                    <span class="tab-badge" id="tabCountAll">0</span>
+                </button>
+                <button type="button" class="filter-tab" data-filter="live" onclick="setFilter('live')">
+                    <span style="color:#dc2626;">🔴 Live Ngayon</span>
+                    <span class="tab-badge" id="tabCountLive">0</span>
+                </button>
+                <button type="button" class="filter-tab" data-filter="bound" onclick="setFilter('bound')">
+                    <span>💻 Naka-Bind sa PC</span>
+                    <span class="tab-badge" id="tabCountBound">0</span>
+                </button>
+                <button type="button" class="filter-tab" data-filter="active" onclick="setFilter('active')">
+                    <span style="color:#15803d;">🟢 Active</span>
+                    <span class="tab-badge" id="tabCountActive">0</span>
+                </button>
+                <button type="button" class="filter-tab" data-filter="expired" onclick="setFilter('expired')">
+                    <span style="color:#d97706;">⏳ Expired</span>
+                    <span class="tab-badge" id="tabCountExpired">0</span>
+                </button>
+                <button type="button" class="filter-tab" data-filter="disabled" onclick="setFilter('disabled')">
+                    <span style="color:#b91c1c;">🚫 Disabled / Banned</span>
+                    <span class="tab-badge" id="tabCountDisabled">0</span>
+                </button>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="toolbar-info" id="tableShowingText">
+                    Nagpapakita ng mga lisensya...
+                </div>
+                <div class="search-wrap">
+                    <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text" class="search-input" id="tableSearch" placeholder="Hanapin ang customer, code, PC, o TikTok..." oninput="renderTable()">
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Customer & 8-Digit Code</th>
+                            <th>Naka-Bind na Device & PC</th>
+                            <th>TikTok Live Stream Status</th>
+                            <th>History ng Connect</th>
+                            <th>Subscription Validity</th>
+                            <th>Last Active / Online</th>
+                            <th>Admin Control Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="licensesTableBody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="emptyState" class="empty-state" style="display:none;">
+                Walang nahanap na lisensya para sa filter o search na ito.
+            </div>
+        </main>
+    </div>
+
+    <!-- Create License Modal -->
+    <div class="modal-overlay" id="createModal">
+        <div class="modal-box">
+            <h2 class="modal-title">Gumawa ng Bagong 8-Digit License</h2>
+            <p class="modal-sub">Ang code na ito ay magagamit ng customer sa TikTok Live Stream Tools app.</p>
+
+            <form id="createForm" onsubmit="event.preventDefault(); submitCreateLicense();">
+                <div class="form-group">
+                    <label class="form-label">Pangalan ng Customer / Streamer Note</label>
+                    <input type="text" id="newClientName" class="form-control" placeholder="hal. Juan Dela Cruz (Mobile Legends Streamer)" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Subscription Plan / Duration</label>
+                    <select id="newDuration" class="form-control">
+                        <option value="30">30 Days (1 Buwan)</option>
+                        <option value="7">7 Days Trial</option>
+                        <option value="60">60 Days (2 Buwan)</option>
+                        <option value="90">90 Days (3 Buwan)</option>
+                        <option value="365">1 Year Access</option>
+                        <option value="0">Lifetime Access (Walang Expiration)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Custom 8-Digit Code (Optional)</label>
+                    <input type="text" id="newCustomCode" class="form-control" placeholder="Iwanang blank para sa auto-generate" maxlength="8">
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeCreateModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Gumawa ng License</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Customer Modal -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal-box">
+            <h2 class="modal-title">I-edit ang Detalye ng Customer</h2>
+            <p class="modal-sub">Palitan ang pangalan o mga tala para sa license na ito.</p>
+
+            <form id="editForm" onsubmit="event.preventDefault(); submitEditLicense();">
+                <input type="hidden" id="editCode">
+                <div class="form-group">
+                    <label class="form-label">Pangalan ng Customer</label>
+                    <input type="text" id="editClientName" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Mga Tala / Contact Info</label>
+                    <input type="text" id="editNotes" class="form-control" placeholder="hal. FB: facebook.com/juan o Telegram: @juan">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">I-save ang Pagbabago</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let allLicenses = [];
+        let currentFilter = 'all';
+        const socket = io();
+
+        function saveToLocalCache(licenses, boundDevices) {
+            if (Array.isArray(licenses) && licenses.length > 0) {
+                try {
+                    localStorage.setItem('zyn_licenses_cache', JSON.stringify({
+                        licenses,
+                        boundDevices: boundDevices || {},
+                        savedAt: Date.now()
+                    }));
+                } catch (e) {}
+            }
+        }
+
+        function getLocalCache() {
+            try {
+                const raw = localStorage.getItem('zyn_licenses_cache');
+                if (raw) return JSON.parse(raw);
+            } catch (e) {}
+            return null;
+        }
+
+        // WebSocket live sync
+        socket.on('licenses_updated', (updatedLicenses) => {
+            allLicenses = updatedLicenses || [];
+            saveToLocalCache(allLicenses);
+            updateStats();
+            renderTable();
+        });
+
+        let isRestoringFromCache = false;
+        async function fetchLicenses() {
+            try {
+                const res = await fetch('/api/admin/licenses');
+                const data = await res.json();
+                if (data.ok) {
+                    // Check if Render Free container restarted (licenses array empty)
+                    if ((!data.licenses || data.licenses.length === 0) && !isRestoringFromCache) {
+                        const cache = getLocalCache();
+                        if (cache && Array.isArray(cache.licenses) && cache.licenses.length > 0) {
+                            console.info('Render free container woke up from sleep. Auto-restoring licenses from browser cache...');
+                            isRestoringFromCache = true;
+                            try {
+                                const restoreRes = await fetch('/api/admin/licenses/sync-backup', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        licenses: cache.licenses,
+                                        boundDevices: cache.boundDevices || {}
+                                    })
+                                });
+                                const restoreData = await restoreRes.json();
+                                if (restoreData.ok && restoreData.licenses) {
+                                    allLicenses = restoreData.licenses;
+                                    updateStats();
+                                    renderTable();
+                                    isRestoringFromCache = false;
+                                    return;
+                                }
+                            } catch (restErr) {
+                                console.warn('Auto-restore failed:', restErr);
+                            }
+                            isRestoringFromCache = false;
+                        }
+                    }
+
+                    // Update Database Status Badge
+                    const badge = document.getElementById('dbStatusBadge');
+                    const text = document.getElementById('dbStatusText');
+                    const dot = document.getElementById('dbStatusDot');
+                    if (badge && text && dot) {
+                        if (data.mongoConnected || data.database === 'mongodb') {
+                            badge.style.background = 'rgba(16, 185, 129, 0.12)';
+                            badge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+                            badge.style.color = '#059669';
+                            dot.style.background = '#10b981';
+                            text.textContent = 'MongoDB Atlas: Connected ✓';
+                        } else {
+                            badge.style.background = 'rgba(245, 158, 11, 0.12)';
+                            badge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+                            badge.style.color = '#d97706';
+                            dot.style.background = '#f59e0b';
+                            text.textContent = 'Storage: Local (No MongoDB)';
+                        }
+                    }
+
+                    allLicenses = data.licenses || [];
+                    saveToLocalCache(allLicenses, data.boundDevices);
+                    updateStats();
+                    renderTable();
+                }
+            } catch (err) {
+                console.error('Failed to load licenses:', err);
+            }
+        }
+
+        function exportDatabaseBackup() {
+            const cache = getLocalCache() || { licenses: allLicenses };
+            const payload = {
+                appName: 'ZYN TOOL Cloud Activator Backup',
+                exportedAt: new Date().toISOString(),
+                count: (cache.licenses || allLicenses).length,
+                licenses: cache.licenses || allLicenses
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `zyn-activator-backup-${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function triggerImportBackup() {
+            const fileInput = document.getElementById('backupFileInput');
+            if (fileInput) fileInput.click();
+        }
+
+        async function handleBackupFileSelected(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const json = JSON.parse(text);
+                const list = json.licenses || (Array.isArray(json) ? json : null);
+                if (!Array.isArray(list) || list.length === 0) {
+                    alert('Walang validong license data na nahanap sa napiling JSON file.');
+                    return;
+                }
+                const res = await fetch('/api/admin/licenses/sync-backup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ licenses: list })
+                });
+                const d = await res.json();
+                if (d.ok) {
+                    alert(`✓ Tagumpay! Na-restore ang ${d.count} licenses sa server!`);
+                    fetchLicenses();
+                } else {
+                    alert('Error sa restore: ' + (d.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Maling format ng JSON file: ' + err.message);
+            }
+            event.target.value = '';
+        }
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-tab').forEach(t => {
+                t.classList.toggle('active', t.getAttribute('data-filter') === filter);
+            });
+            renderTable();
+        }
+
+        function updateStats() {
+            const total = allLicenses.length;
+            const bound = allLicenses.filter(l => l.boundDeviceId && l.status === 'active').length;
+            const live = allLicenses.filter(l => l.isLive).length;
+            const banned = allLicenses.filter(l => l.status === 'disabled').length;
+            const expired = allLicenses.filter(l => l.status === 'expired' || (l.expiresAt && Date.now() > l.expiresAt)).length;
+            const active = allLicenses.filter(l => l.status === 'active' && (!l.expiresAt || Date.now() <= l.expiresAt)).length;
+
+            const allHandles = new Set();
+            allLicenses.forEach(l => {
+                if (Array.isArray(l.tiktokHistory)) {
+                    l.tiktokHistory.forEach(u => allHandles.add(u));
+                }
+                if (l.currentTiktokUser) allHandles.add(l.currentTiktokUser);
+            });
+
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statTotalSub').textContent = `${active} active sa ngayon`;
+            document.getElementById('statBound').textContent = bound;
+            document.getElementById('statLive').textContent = live;
+            document.getElementById('statHandles').textContent = allHandles.size;
+            document.getElementById('statBanned').textContent = banned;
+
+            // Tab badges
+            document.getElementById('tabCountAll').textContent = total;
+            document.getElementById('tabCountLive').textContent = live;
+            document.getElementById('tabCountBound').textContent = bound;
+            document.getElementById('tabCountActive').textContent = active;
+            document.getElementById('tabCountExpired').textContent = expired;
+            document.getElementById('tabCountDisabled').textContent = banned;
+        }
+
+        function formatRelativeTime(timestamp) {
+            if (!timestamp) return '<span style="color:#94a3b8;">Hindi pa nag-online</span>';
+            const diff = Math.floor((Date.now() - timestamp) / 1000);
+            if (diff < 15) return '<span class="online-status"><span class="dot-green"></span> <b style="color:#16a34a;">Online ngayon</b></span>';
+            if (diff < 60) return `<span class="online-status"><span class="dot-green"></span> ${diff}s ang nakalipas</span>`;
+            if (diff < 3600) return `<span class="online-status"><span class="dot-gray"></span> ${Math.floor(diff / 60)}m ang nakalipas</span>`;
+            if (diff < 86400) return `<span class="online-status"><span class="dot-gray"></span> ${Math.floor(diff / 3600)}h ang nakalipas</span>`;
+            return `<span class="online-status"><span class="dot-gray"></span> ${Math.floor(diff / 86400)}d ang nakalipas</span>`;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('licensesTableBody');
+            const search = document.getElementById('tableSearch').value.toLowerCase().trim();
+
+            let list = allLicenses.filter(l => {
+                const isExp = l.status === 'expired' || (l.expiresAt && Date.now() > l.expiresAt);
+                if (currentFilter === 'live') return l.isLive;
+                if (currentFilter === 'bound') return !!l.boundDeviceId;
+                if (currentFilter === 'active') return l.status === 'active' && !isExp;
+                if (currentFilter === 'expired') return isExp;
+                if (currentFilter === 'disabled') return l.status === 'disabled';
+                return true;
+            });
+
+            if (search) {
+                list = list.filter(l => {
+                    const c = String(l.code).includes(search);
+                    const n = String(l.clientName || '').toLowerCase().includes(search);
+                    const notes = String(l.notes || '').toLowerCase().includes(search);
+                    const d = String(l.boundDeviceId || '').toLowerCase().includes(search);
+                    const h = String(l.hostname || '').toLowerCase().includes(search);
+                    const u = String(l.currentTiktokUser || '').toLowerCase().includes(search);
+                    const hist = Array.isArray(l.tiktokHistory) && l.tiktokHistory.some(x => String(x).toLowerCase().includes(search));
+                    return c || n || notes || d || h || u || hist;
+                });
+            }
+
+            document.getElementById('tableShowingText').textContent = `Nagpapakita ng ${list.length} sa ${allLicenses.length} na lisensya`;
+
+            if (!list.length) {
+                tbody.innerHTML = '';
+                document.getElementById('emptyState').style.display = 'block';
+                return;
+            }
+
+            document.getElementById('emptyState').style.display = 'none';
+
+            tbody.innerHTML = list.map(lic => {
+                // Live Stream Pill
+                let streamHtml = '';
+                if (lic.isLive && lic.currentTiktokUser) {
+                    streamHtml = `
+                        <div class="stream-cell">
+                            <a href="https://www.tiktok.com/@${lic.currentTiktokUser}/live" target="_blank" class="live-btn-tag" title="Buksan ang TikTok Live sa bagong tab">
+                                <span class="live-pulse"></span>
+                                <span>LIVE: @${lic.currentTiktokUser}</span>
+                            </a>
+                            <span class="stream-count-sub">Session count: ${lic.totalLiveSessions || 1}</span>
+                        </div>
+                    `;
+                } else {
+                    streamHtml = `
+                        <div class="stream-cell">
+                            <span class="idle-tag">⚪ Offline / Idle</span>
+                            <span class="stream-count-sub">${lic.totalLiveSessions ? `${lic.totalLiveSessions} sessions recorded` : 'Wala pang stream'}</span>
+                        </div>
+                    `;
+                }
+
+                // History Tags
+                let historyHtml = '<span style="color:#94a3b8; font-size:11px;">Wala pa</span>';
+                if (Array.isArray(lic.tiktokHistory) && lic.tiktokHistory.length) {
+                    historyHtml = `
+                        <div class="history-wrap">
+                            ${lic.tiktokHistory.map(u => `<span class="user-tag">@${u}</span>`).join('')}
+                        </div>
+                    `;
+                }
+
+                // PC Hardware identity
+                let pcHtml = '';
+                if (lic.boundDeviceId) {
+                    pcHtml = `
+                        <div class="pc-cell">
+                            <span class="pc-id-badge">💻 ${lic.boundDeviceId}</span>
+                            <div class="pc-specs-row">
+                                <span class="lock-pill ${lic.deviceLocked ? 'locked' : 'free'}">
+                                    ${lic.deviceLocked ? '🔒 Locked to PC' : 'Free / Unbound'}
+                                </span>
+                                <span>${lic.hostname ? lic.hostname : ''} ${lic.osPlatform ? `(${lic.osPlatform})` : ''}</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    pcHtml = `<span style="color:#94a3b8; font-size:12px;">Hindi pa nagagamit (Unbound)</span>`;
+                }
+
+                // Expiry & Validity
+                let valHtml = '';
+                if (!lic.expiresAt) {
+                    valHtml = `
+                        <div class="validity-cell">
+                            <span class="validity-badge lifetime">♾️ Lifetime Access</span>
+                            <span class="date-sub">Walang expiration</span>
+                        </div>
+                    `;
+                } else {
+                    const diff = lic.expiresAt - Date.now();
+                    const isExp = diff <= 0;
+                    const days = Math.ceil(diff / (24 * 60 * 60 * 1000));
+                    valHtml = `
+                        <div class="validity-cell">
+                            <span class="validity-badge ${isExp ? 'expired' : 'active'}">
+                                ${isExp ? 'EXPIRED' : `🟢 ${days} araw natitira`}
+                            </span>
+                            <span class="date-sub">${new Date(lic.expiresAt).toLocaleDateString()}</span>
+                        </div>
+                    `;
+                }
+
+                // Online & IP
+                const lastOnlineHtml = `
+                    <div class="online-cell">
+                        ${formatRelativeTime(lic.lastSeenAt)}
+                        ${lic.ip ? `<span class="ip-sub">${lic.ip}</span>` : ''}
+                    </div>
+                `;
+
+                // Actions
+                const isDis = lic.status === 'disabled';
+                const toggleBanBtn = isDis ? `
+                    <button type="button" class="btn-sm btn-unban" onclick="toggleStatus('${lic.code}')" title="I-unban o i-enable ang license">
+                        ✓ Unban
+                    </button>
+                ` : `
+                    <button type="button" class="btn-sm btn-ban" onclick="toggleStatus('${lic.code}')" title="I-disable agad para mag-lock ang app ng customer">
+                        🚫 Ban
+                    </button>
+                `;
+
+                const unlockBtn = lic.boundDeviceId ? `
+                    <button type="button" class="btn-sm btn-unlock-hw" onclick="unlockDevice('${lic.code}', '${lic.boundDeviceId}')" title="I-alis ang PC Lock para makapag-transfer ng device">
+                        🔓 Unlock PC
+                    </button>
+                ` : '';
+
+                const renewBtn = `
+                    <button type="button" class="btn-sm btn-extend" onclick="quickRenewPrompt('${lic.code}')" title="Magdagdag ng araw">
+                        + Renew
+                    </button>
+                `;
+
+                const editBtn = `
+                    <button type="button" class="btn-sm btn-edit" onclick="openEditModal('${lic.code}', '${escapeHtml(lic.clientName || '')}', '${escapeHtml(lic.notes || '')}')" title="I-edit ang pangalan o tala">
+                        ✏️
+                    </button>
+                `;
+
+                const shareBtn = `
+                    <button type="button" class="btn-sm btn-edit" onclick="shareLicense('${lic.code}', '${escapeHtml(lic.clientName || 'Valued Customer')}', ${lic.expiresAt || 'null'})" title="Kopyahin ang ready-to-send message para kay customer">
+                        📋 Share
+                    </button>
+                `;
+
+                const delBtn = `
+                    <button type="button" class="btn-sm btn-icon-del" onclick="deleteLicense('${lic.code}')" title="Burahin">
+                        🗑️
+                    </button>
+                `;
+
+                return `
+                    <tr>
+                        <td>
+                            <div class="cust-cell">
+                                <span class="cust-name">
+                                    👤 ${escapeHtml(lic.clientName || 'Customer')}
+                                </span>
+                                ${lic.notes ? `<span class="cust-notes">${escapeHtml(lic.notes)}</span>` : ''}
+                                <span class="code-pill" onclick="copyText('${lic.code}')" title="I-click para kopyahin">
+                                    🔑 ${lic.code}
+                                </span>
+                            </div>
+                        </td>
+                        <td>${pcHtml}</td>
+                        <td>${streamHtml}</td>
+                        <td>${historyHtml}</td>
+                        <td>${valHtml}</td>
+                        <td>${lastOnlineHtml}</td>
+                        <td>
+                            <div class="actions-flex">
+                                ${toggleBanBtn}
+                                ${unlockBtn}
+                                ${renewBtn}
+                                ${shareBtn}
+                                ${editBtn}
+                                ${delBtn}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(str) {
+            return String(str || '').replace(/[&<>'"]/g, 
+                tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+            );
+        }
+
+        async function toggleStatus(code) {
+            try {
+                await fetch(`/api/admin/licenses/${code}/toggle-status`, { method: 'POST' });
+                fetchLicenses();
+            } catch (e) {
+                alert('Action failed: ' + e.message);
+            }
+        }
+
+        async function unlockDevice(code, deviceId) {
+            if (!confirm(`Gusto mo bang alisin ang lock ng PC (${deviceId})? Papayagan nito ang customer na mag-transfer ng PC o mag-bind ng bago.`)) {
+                return;
+            }
+            try {
+                const res = await fetch(`/api/admin/licenses/${code}/unlock-device`, { method: 'POST' });
+                const d = await res.json();
+                alert(d.message || 'PC Lock removed!');
+                fetchLicenses();
+            } catch (e) {
+                alert('Action failed: ' + e.message);
+            }
+        }
+
+        async function quickRenewPrompt(code) {
+            const days = prompt('Ilang araw ang idaragdag sa lisensya? (hal. 30, 60, 365, o 0 para sa Lifetime)', '30');
+            if (days === null) return;
+            const num = parseInt(days, 10);
+            try {
+                const res = await fetch(`/api/admin/licenses/${code}/renew`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ extendDays: isNaN(num) ? 30 : num })
+                });
+                const d = await res.json();
+                alert(d.message || 'Renewed!');
+                fetchLicenses();
+            } catch (e) {
+                alert('Action failed: ' + e.message);
+            }
+        }
+
+        async function deleteLicense(code) {
+            if (!confirm(`Sigurado ka bang buburahin ang license #${code}?`)) return;
+            try {
+                await fetch(`/api/admin/licenses/${code}`, { method: 'DELETE' });
+                fetchLicenses();
+            } catch (e) {
+                alert('Delete failed: ' + e.message);
+            }
+        }
+
+        function shareLicense(code, name, expiresAt) {
+            const expText = expiresAt ? new Date(expiresAt).toLocaleDateString() : 'Lifetime Access';
+            const msg = `Hello ${name}!\n\nIto ang iyong opisyal na 8-Digit Activation Code para sa TikTok Live Stream Tools (ZYN TOOL):\n\n👉 CODE: ${code}\nValidity: ${expText}\n\nI-paste lang ang 8-digit code sa activation screen ng app para mag-unlock. Salamat!`;
+            navigator.clipboard.writeText(msg).then(() => {
+                alert(`Nakopya na sa clipboard ang mensahe para kay ${name}! Pwede mo na itong i-paste sa Messenger o Telegram.`);
+            });
+        }
+
+        function copyText(txt) {
+            navigator.clipboard.writeText(txt).then(() => {
+                alert(`Kopya na ang 8-Digit Code: ${txt}`);
+            });
+        }
+
+        // Modal controls
+        function openCreateModal() {
+            document.getElementById('createModal').classList.add('open');
+            document.getElementById('newClientName').focus();
+        }
+
+        function closeCreateModal() {
+            document.getElementById('createModal').classList.remove('open');
+        }
+
+        function openEditModal(code, name, notes) {
+            document.getElementById('editCode').value = code;
+            document.getElementById('editClientName').value = name;
+            document.getElementById('editNotes').value = notes;
+            document.getElementById('editModal').classList.add('open');
+            document.getElementById('editClientName').focus();
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.remove('open');
+        }
+
+        async function submitCreateLicense() {
+            const clientName = document.getElementById('newClientName').value.trim();
+            const durationDays = document.getElementById('newDuration').value;
+            const customCode = document.getElementById('newCustomCode').value.trim();
+
+            try {
+                const res = await fetch('/api/admin/licenses/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ clientName, durationDays, customCode })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    closeCreateModal();
+                    document.getElementById('createForm').reset();
+                    alert(`Tagumpay! Bagong 8-digit license code: ${data.license.code}`);
+                    fetchLicenses();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function submitEditLicense() {
+            const code = document.getElementById('editCode').value;
+            const clientName = document.getElementById('editClientName').value.trim();
+            const notes = document.getElementById('editNotes').value.trim();
+
+            try {
+                const res = await fetch(`/api/admin/licenses/${code}/edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ clientName, notes })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    closeEditModal();
+                    fetchLicenses();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        // Auto polling fallback every 6 seconds in addition to WebSockets
+        setInterval(fetchLicenses, 6000);
+        document.addEventListener('DOMContentLoaded', fetchLicenses);
+    </script>
+</body>
+</html>
