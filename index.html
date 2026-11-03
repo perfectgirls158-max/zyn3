@@ -1013,10 +1013,109 @@
         </div>
     </div>
 
+    <!-- Admin Security Login Modal (Protects Dashboard from Wireshark/Network Snooping) -->
+    <div class="modal-overlay" id="adminLoginModal" style="backdrop-filter: blur(8px); background: rgba(15, 23, 42, 0.78); z-index: 9999;">
+        <div class="modal-box" style="max-width: 400px; text-align: center;">
+            <div style="width: 52px; height: 52px; border-radius: 14px; background: #eef2ff; color: #4f46e5; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+            </div>
+            <h2 class="modal-title">Admin Security Lock</h2>
+            <p class="modal-sub">Ilagay ang iyong Admin Password upang buksan ang ZYN Cloud Activator Control Panel.</p>
+            <form id="adminLoginForm" onsubmit="event.preventDefault(); submitAdminLogin();">
+                <div class="form-group" style="text-align: left;">
+                    <label class="form-label">Admin Password</label>
+                    <input type="password" id="adminPasswordInput" class="form-control" placeholder="••••••••••••" required autocomplete="current-password">
+                </div>
+                <div id="adminLoginError" style="display:none; color:#dc2626; font-size:12px; font-weight:700; margin-bottom:12px;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; height: 44px;">
+                    <span>Buksan ang Admin Dashboard</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
     <script>
         let allLicenses = [];
         let currentFilter = 'all';
-        const socket = io();
+        let serverTimeOffset = 0;
+
+        function getAdminToken() {
+            try { return localStorage.getItem('zyn_admin_token') || ''; } catch (e) { return ''; }
+        }
+
+        function setAdminToken(token) {
+            try { localStorage.setItem('zyn_admin_token', token || ''); } catch (e) {}
+        }
+
+        const socket = io({
+            auth: { token: getAdminToken() }
+        });
+
+        socket.on('connect', () => {
+            const tok = getAdminToken();
+            if (tok) socket.emit('admin_auth', tok);
+        });
+
+        async function adminFetch(url, options = {}) {
+            const headers = Object.assign({}, options.headers || {}, {
+                'x-admin-token': getAdminToken()
+            });
+            const res = await fetch(url, Object.assign({}, options, { headers }));
+            if (res.status === 401) {
+                openAdminLoginModal();
+            }
+            return res;
+        }
+
+        function openAdminLoginModal() {
+            const modal = document.getElementById('adminLoginModal');
+            if (modal && !modal.classList.contains('open')) {
+                modal.classList.add('open');
+                setTimeout(() => {
+                    const inp = document.getElementById('adminPasswordInput');
+                    if (inp) inp.focus();
+                }, 100);
+            }
+        }
+
+        async function submitAdminLogin() {
+            const inp = document.getElementById('adminPasswordInput');
+            const errBox = document.getElementById('adminLoginError');
+            const password = inp ? inp.value.trim() : '';
+            if (!password) return;
+            try {
+                const res = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                const data = await res.json();
+                if (data.ok && data.token) {
+                    setAdminToken(data.token);
+                    if (errBox) errBox.style.display = 'none';
+                    document.getElementById('adminLoginModal').classList.remove('open');
+                    socket.emit('admin_auth', data.token);
+                    fetchLicenses();
+                } else {
+                    if (errBox) {
+                        errBox.textContent = data.error || 'Maling Admin Password!';
+                        errBox.style.display = 'block';
+                    }
+                }
+            } catch (err) {
+                if (errBox) {
+                    errBox.textContent = 'Network error: ' + err.message;
+                    errBox.style.display = 'block';
+                }
+            }
+        }
+
+        function getServerNow() {
+            return Date.now() + serverTimeOffset;
+        }
 
         function saveToLocalCache(licenses, boundDevices) {
             if (Array.isArray(licenses) && licenses.length > 0) {
@@ -1049,9 +1148,13 @@
         let isRestoringFromCache = false;
         async function fetchLicenses() {
             try {
-                const res = await fetch('/api/admin/licenses');
+                const res = await adminFetch('/api/admin/licenses');
+                if (res.status === 401) return;
                 const data = await res.json();
                 if (data.ok) {
+                    if (data.serverTime) {
+                        serverTimeOffset = Number(data.serverTime) - Date.now();
+                    }
                     // Check if Render Free container restarted (licenses array empty)
                     if ((!data.licenses || data.licenses.length === 0) && !isRestoringFromCache) {
                         const cache = getLocalCache();
@@ -1059,7 +1162,7 @@
                             console.info('Render free container woke up from sleep. Auto-restoring licenses from browser cache...');
                             isRestoringFromCache = true;
                             try {
-                                const restoreRes = await fetch('/api/admin/licenses/sync-backup', {
+                                const restoreRes = await adminFetch('/api/admin/licenses/sync-backup', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
@@ -1147,7 +1250,7 @@
                     alert('Walang validong license data na nahanap sa napiling JSON file.');
                     return;
                 }
-                const res = await fetch('/api/admin/licenses/sync-backup', {
+                const res = await adminFetch('/api/admin/licenses/sync-backup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ licenses: list })
@@ -1174,12 +1277,13 @@
         }
 
         function updateStats() {
+            const now = getServerNow();
             const total = allLicenses.length;
             const bound = allLicenses.filter(l => l.boundDeviceId && l.status === 'active').length;
             const live = allLicenses.filter(l => l.isLive).length;
             const banned = allLicenses.filter(l => l.status === 'disabled').length;
-            const expired = allLicenses.filter(l => l.status === 'expired' || (l.expiresAt && Date.now() > l.expiresAt)).length;
-            const active = allLicenses.filter(l => l.status === 'active' && (!l.expiresAt || Date.now() <= l.expiresAt)).length;
+            const expired = allLicenses.filter(l => l.status === 'expired' || (l.expiresAt && now > l.expiresAt)).length;
+            const active = allLicenses.filter(l => l.status === 'active' && (!l.expiresAt || now <= l.expiresAt)).length;
 
             const allHandles = new Set();
             allLicenses.forEach(l => {
@@ -1207,7 +1311,7 @@
 
         function formatRelativeTime(timestamp) {
             if (!timestamp) return '<span style="color:#94a3b8;">Hindi pa nag-online</span>';
-            const diff = Math.floor((Date.now() - timestamp) / 1000);
+            const diff = Math.max(0, Math.floor((getServerNow() - timestamp) / 1000));
             if (diff < 15) return '<span class="online-status"><span class="dot-green"></span> <b style="color:#16a34a;">Online ngayon</b></span>';
             if (diff < 60) return `<span class="online-status"><span class="dot-green"></span> ${diff}s ang nakalipas</span>`;
             if (diff < 3600) return `<span class="online-status"><span class="dot-gray"></span> ${Math.floor(diff / 60)}m ang nakalipas</span>`;
@@ -1218,9 +1322,10 @@
         function renderTable() {
             const tbody = document.getElementById('licensesTableBody');
             const search = document.getElementById('tableSearch').value.toLowerCase().trim();
+            const now = getServerNow();
 
             let list = allLicenses.filter(l => {
-                const isExp = l.status === 'expired' || (l.expiresAt && Date.now() > l.expiresAt);
+                const isExp = l.status === 'expired' || (l.expiresAt && now > l.expiresAt);
                 if (currentFilter === 'live') return l.isLive;
                 if (currentFilter === 'bound') return !!l.boundDeviceId;
                 if (currentFilter === 'active') return l.status === 'active' && !isExp;
@@ -1312,9 +1417,9 @@
                         </div>
                     `;
                 } else {
-                    const diff = lic.expiresAt - Date.now();
-                    const isExp = diff <= 0;
-                    const days = Math.ceil(diff / (24 * 60 * 60 * 1000));
+                    const diff = lic.expiresAt - now;
+                    const isExp = lic.status === 'expired' || diff <= 0;
+                    const days = Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
                     valHtml = `
                         <div class="validity-cell">
                             <span class="validity-badge ${isExp ? 'expired' : 'active'}">
@@ -1416,7 +1521,7 @@
 
         async function toggleStatus(code) {
             try {
-                await fetch(`/api/admin/licenses/${code}/toggle-status`, { method: 'POST' });
+                await adminFetch(`/api/admin/licenses/${code}/toggle-status`, { method: 'POST' });
                 fetchLicenses();
             } catch (e) {
                 alert('Action failed: ' + e.message);
@@ -1428,7 +1533,7 @@
                 return;
             }
             try {
-                const res = await fetch(`/api/admin/licenses/${code}/unlock-device`, { method: 'POST' });
+                const res = await adminFetch(`/api/admin/licenses/${code}/unlock-device`, { method: 'POST' });
                 const d = await res.json();
                 alert(d.message || 'PC Lock removed!');
                 fetchLicenses();
@@ -1442,7 +1547,7 @@
             if (days === null) return;
             const num = parseInt(days, 10);
             try {
-                const res = await fetch(`/api/admin/licenses/${code}/renew`, {
+                const res = await adminFetch(`/api/admin/licenses/${code}/renew`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ extendDays: isNaN(num) ? 30 : num })
@@ -1458,7 +1563,7 @@
         async function deleteLicense(code) {
             if (!confirm(`Sigurado ka bang buburahin ang license #${code}?`)) return;
             try {
-                await fetch(`/api/admin/licenses/${code}`, { method: 'DELETE' });
+                await adminFetch(`/api/admin/licenses/${code}`, { method: 'DELETE' });
                 fetchLicenses();
             } catch (e) {
                 alert('Delete failed: ' + e.message);
@@ -1507,7 +1612,7 @@
             const customCode = document.getElementById('newCustomCode').value.trim();
 
             try {
-                const res = await fetch('/api/admin/licenses/create', {
+                const res = await adminFetch('/api/admin/licenses/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ clientName, durationDays, customCode })
@@ -1532,7 +1637,7 @@
             const notes = document.getElementById('editNotes').value.trim();
 
             try {
-                const res = await fetch(`/api/admin/licenses/${code}/edit`, {
+                const res = await adminFetch(`/api/admin/licenses/${code}/edit`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ clientName, notes })
