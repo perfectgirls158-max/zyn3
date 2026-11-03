@@ -1,10 +1,29 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const { MongoClient } = require('mongodb');
+
+const ACTIVATOR_SECRET_KEY = process.env.ACTIVATOR_SECRET_KEY || 'ZYN_ACTIVATOR_SECRET_KEY_2026';
+const CLOUD_RESPONSE_SECRET = 'ZYN_CLOUD_CHALLENGE_SIGN_2026_' + ACTIVATOR_SECRET_KEY;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ZynAdmin2026';
+const ADMIN_TOKEN = crypto.createHmac('sha256', CLOUD_RESPONSE_SECRET).update('ADMIN_SESSION_' + ADMIN_PASSWORD).digest('hex');
+
+function computeCloudResponseSignature({ deviceId, code, active, status, expiresAt, serverTime, nonce }) {
+    const payload = [
+        String(deviceId || ''),
+        String(code || ''),
+        active === false ? '0' : '1',
+        String(status || ''),
+        String(expiresAt || '0'),
+        String(serverTime || '0'),
+        String(nonce || '')
+    ].join('|');
+    return crypto.createHmac('sha256', CLOUD_RESPONSE_SECRET).update(payload).digest('hex');
+}
 
 const app = express();
 const httpServer = createServer(app);
@@ -67,6 +86,8 @@ function saveDatabase(db) {
     }
 }
 
+let mongoInitPromise = null;
+
 async function initMongoDB() {
     if (!MONGODB_URI) {
         console.info('[Database] No MONGODB_URI set. Running in local JSON storage mode.');
@@ -110,7 +131,13 @@ async function initMongoDB() {
         isMongoConnected = false;
     }
 }
-initMongoDB();
+mongoInitPromise = initMongoDB();
+
+async function ensureDbReady() {
+    if (mongoInitPromise) {
+        try { await mongoInitPromise; } catch (e) {}
+    }
+}
 
 // Generate random unique 8-digit numeric code
 function generateUnique8DigitCode(db) {
@@ -133,11 +160,45 @@ app.get(['/', '/admin'], (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Broadcast updates to Admin Dashboard clients via WebSocket
+// Broadcast updates ONLY to authenticated Admin Dashboard clients via WebSocket
+io.on('connection', (socket) => {
+    const token = socket.handshake?.auth?.token || socket.handshake?.query?.token;
+    if (token === ADMIN_TOKEN) {
+        socket.join('authorized_admins');
+    }
+    socket.on('admin_auth', (clientToken) => {
+        if (clientToken === ADMIN_TOKEN) {
+            socket.join('authorized_admins');
+            const db = loadDatabase();
+            socket.emit('licenses_updated', db.licenses);
+        }
+    });
+});
+
 function broadcastAdminUpdate() {
     const db = loadDatabase();
-    io.emit('licenses_updated', db.licenses);
+    io.to('authorized_admins').emit('licenses_updated', db.licenses);
 }
+
+// Admin Login Endpoint
+app.post('/api/admin/login', (req, res) => {
+    const { password } = req.body || {};
+    if (String(password || '').trim() === ADMIN_PASSWORD) {
+        return res.json({ ok: true, token: ADMIN_TOKEN });
+    }
+    return res.status(401).json({ ok: false, error: 'Maling Admin Password!' });
+});
+
+// Middleware to protect all /api/admin/* endpoints from unauthorized access (e.g. Wireshark/network snooping)
+function requireAdminAuth(req, res, next) {
+    if (req.path === '/login') return next();
+    const token = req.headers['x-admin-token'] || req.query.token || '';
+    if (token !== ADMIN_TOKEN) {
+        return res.status(401).json({ ok: false, unauthorized: true, error: 'Unauthorized: Admin login required.' });
+    }
+    next();
+}
+app.use('/api/admin', requireAdminAuth);
 
 // ---------------------------------------------------------------------------
 // REST API FOR DESKTOP APPLICATION
@@ -148,72 +209,108 @@ function broadcastAdminUpdate() {
  * POST /api/license/activate
  * Body: { deviceId: string, code: string }
  */
-app.post('/api/license/activate', (req, res) => {
-    const { deviceId, code } = req.body || {};
+app.post('/api/license/activate', async (req, res) => {
+    await ensureDbReady();
+    const { deviceId, code, nonce } = req.body || {};
     const cleanCode = String(code || '').replace(/\D/g, '').trim();
     const cleanDevice = String(deviceId || '').trim();
+    const now = Date.now();
 
     if (!cleanDevice || cleanCode.length !== 8) {
-        return res.status(400).json({ ok: false, error: 'Valid Device ID and 8-digit code are required.' });
+        return res.status(400).json({ ok: false, serverTime: now, error: 'Valid Device ID and 8-digit code are required.' });
     }
 
     const db = loadDatabase();
     const lic = db.licenses.find(l => l.code === cleanCode);
 
     if (!lic) {
-        return res.status(404).json({ ok: false, error: 'Hindi nahanap ang activation code na ito. Paki-check sa administrator.' });
+        return res.status(404).json({ ok: false, serverTime: now, error: 'Hindi nahanap ang activation code na ito. Paki-check sa administrator.' });
     }
 
     if (lic.status === 'disabled') {
-        return res.status(403).json({ ok: false, error: 'Ang license na ito ay kasalukuyang naka-DISABLE ng administrator.' });
+        return res.status(403).json({ ok: false, serverTime: now, error: 'Ang license na ito ay kasalukuyang naka-DISABLE ng administrator.' });
     }
 
-    // Check expiration
-    if (lic.expiresAt && Date.now() > lic.expiresAt) {
+    // Ensure durationDays always has a concrete expiresAt timestamp
+    if (!lic.expiresAt && Number(lic.durationDays) > 0) {
+        const baseTs = Number(lic.activatedAt) || Number(lic.createdAt) || now;
+        lic.expiresAt = baseTs + Number(lic.durationDays) * 24 * 60 * 60 * 1000;
+    }
+
+    // Strict expiration check (both status === 'expired' and timestamp check)
+    if (lic.status === 'expired' || (lic.expiresAt && now > Number(lic.expiresAt))) {
         lic.status = 'expired';
+        lic.isLive = false;
+        lic.currentTiktokUser = null;
         saveDatabase(db);
         broadcastAdminUpdate();
-        return res.status(403).json({ ok: false, error: 'Nag-expire na ang activation code na ito. Makipag-ugnayan sa administrator para mag-renew.' });
+        return res.status(403).json({
+            ok: false,
+            serverTime: now,
+            error: 'Nag-expire na ang activation code na ito. Hindi na ito pwedeng gamitin ulit. Makipag-ugnayan sa administrator para mag-renew.'
+        });
     }
 
     // Check if license is already bound to another PC
     if (lic.boundDeviceId && lic.boundDeviceId !== cleanDevice) {
         return res.status(409).json({
             ok: false,
+            serverTime: now,
             error: `Ang code na ito ay naka-bind na sa ibang PC (${lic.boundDeviceId}). 1 PC per license lang po.`
         });
     }
 
-    // Check if this PC is locked to a DIFFERENT active license
+    // Check if this PC is locked to a DIFFERENT license
     const existingBinding = db.boundDevices[cleanDevice];
     if (existingBinding && existingBinding.licenseCode !== cleanCode && existingBinding.deviceLocked) {
-        const oldLic = db.licenses.find(l => l.code === existingBinding.licenseCode);
-        const oldStatus = oldLic ? oldLic.status : 'locked';
         return res.status(423).json({
             ok: false,
-            error: `Ang PC na ito ay naka-lock sa dating lisensya (#${existingBinding.licenseCode}). Bawal gumamit ng bagong code nang walang pahintulot. Paki-renew o i-pa-unlock sa administrator.`
+            serverTime: now,
+            error: `Ang PC na ito ay naka-lock sa dating lisensya (#${existingBinding.licenseCode}). Bawal gumamit ng ibang code nang walang pahintulot. Paki-renew o i-pa-unlock sa administrator.`
         });
     }
 
-    // Bind device & activate
+    // ONE-TIME ACTIVATION LOCK: Prevent reusing an existing activated code after uninstall/reinstall unless Admin clicks "Unlock PC" or "Renew"
+    if (lic.deviceLocked && lic.boundDeviceId === cleanDevice && lic.activatedAt) {
+        return res.status(403).json({
+            ok: false,
+            serverTime: now,
+            error: 'Ang activation code na ito ay nagamit at naka-lock na sa unang install. Para mag-reinstall, ipapindot muna ang "🔓 Unlock PC" sa administrator.'
+        });
+    }
+
+    // Bind device & activate (First-time or Admin-unlocked activation)
     lic.boundDeviceId = cleanDevice;
     lic.deviceLocked = true;
-    lic.activatedAt = lic.activatedAt || Date.now();
-    lic.lastSeenAt = Date.now();
+    lic.activatedAt = lic.activatedAt || now;
+    lic.activationCount = (Number(lic.activationCount) || 0) + 1;
+    lic.lastSeenAt = now;
     lic.status = 'active';
 
     // Save device lock record
     db.boundDevices[cleanDevice] = {
         licenseCode: cleanCode,
         deviceLocked: true,
-        boundAt: Date.now()
+        boundAt: now
     };
 
     saveDatabase(db);
     broadcastAdminUpdate();
 
+    const serverSig = computeCloudResponseSignature({
+        deviceId: cleanDevice,
+        code: lic.code,
+        active: true,
+        status: lic.status,
+        expiresAt: lic.expiresAt,
+        serverTime: now,
+        nonce
+    });
+
     return res.json({
         ok: true,
+        serverTime: now,
+        serverSig,
         message: 'Matagumpay na na-activate ang iyong device sa cloud server!',
         license: {
             code: lic.code,
@@ -227,40 +324,65 @@ app.post('/api/license/activate', (req, res) => {
 /**
  * 2. REAL-TIME HEARTBEAT & LIVE STREAM TRACKING
  * POST /api/license/heartbeat
- * Body: { deviceId, code, currentTiktokUser, tiktokHistory, appVersion, osPlatform, hostname }
+ * Body: { deviceId, code, nonce, currentTiktokUser, tiktokHistory, appVersion, osPlatform, hostname }
  */
-app.post('/api/license/heartbeat', (req, res) => {
-    const { deviceId, code, currentTiktokUser, tiktokHistory, appVersion, osPlatform, hostname } = req.body || {};
+app.post('/api/license/heartbeat', async (req, res) => {
+    await ensureDbReady();
+    const { deviceId, code, nonce, currentTiktokUser, tiktokHistory, appVersion, osPlatform, hostname } = req.body || {};
     const cleanCode = String(code || '').replace(/\D/g, '').trim();
     const cleanDevice = String(deviceId || '').trim();
+    const now = Date.now();
+
+    const sendSignedHeartbeatResponse = (payload) => {
+        const sig = computeCloudResponseSignature({
+            deviceId: cleanDevice,
+            code: cleanCode,
+            active: payload.active,
+            status: payload.status,
+            expiresAt: payload.expiresAt,
+            serverTime: now,
+            nonce
+        });
+        return res.json(Object.assign({}, payload, { serverTime: now, serverSig: sig }));
+    };
 
     if (!cleanDevice || !cleanCode) {
-        return res.status(400).json({ ok: false, error: 'Missing deviceId or code' });
+        return res.status(400).json({ ok: false, serverTime: now, error: 'Missing deviceId or code' });
     }
 
     const db = loadDatabase();
     const lic = db.licenses.find(l => l.code === cleanCode);
 
     if (!lic) {
-        return res.json({ ok: false, active: false, status: 'not_found', error: 'License does not exist in cloud' });
+        return sendSignedHeartbeatResponse({ ok: false, active: false, status: 'not_found', error: 'License does not exist in cloud' });
     }
 
     // Verify PC matches bound device
     if (lic.boundDeviceId && lic.boundDeviceId !== cleanDevice) {
-        return res.json({ ok: false, active: false, status: 'mismatch', error: 'Device mismatch' });
+        return sendSignedHeartbeatResponse({ ok: false, active: false, status: 'mismatch', error: 'Device mismatch' });
     }
 
     // Check if disabled by Admin
     if (lic.status === 'disabled') {
-        return res.json({ ok: false, active: false, status: 'disabled', error: 'License disabled by administrator' });
+        lic.isLive = false;
+        lic.currentTiktokUser = null;
+        return sendSignedHeartbeatResponse({ ok: false, active: false, status: 'disabled', error: 'License disabled by administrator' });
+    }
+
+    // Ensure durationDays always has a concrete expiresAt timestamp
+    if (!lic.expiresAt && Number(lic.durationDays) > 0) {
+        const baseTs = Number(lic.activatedAt) || Number(lic.createdAt) || now;
+        lic.expiresAt = baseTs + Number(lic.durationDays) * 24 * 60 * 60 * 1000;
     }
 
     // Check expiration
-    if (lic.expiresAt && Date.now() > lic.expiresAt) {
+    if (lic.status === 'expired' || (lic.expiresAt && now > Number(lic.expiresAt))) {
         lic.status = 'expired';
+        lic.isLive = false;
+        lic.currentTiktokUser = null;
         saveDatabase(db);
         broadcastAdminUpdate();
-        return res.json({ ok: false, active: false, status: 'expired', error: 'License has expired' });
+        return sendSignedHeartbeatResponse({ ok: false, active: false, status: 'expired', expiresAt: lic.expiresAt, error: 'Nag-expire na ang iyong activation code.' });
     }
 
     // Update Live Tracking details
@@ -303,9 +425,10 @@ app.post('/api/license/heartbeat', (req, res) => {
     saveDatabase(db);
     broadcastAdminUpdate();
 
-    return res.json({
+    return sendSignedHeartbeatResponse({
         ok: true,
         active: true,
+        clientName: lic.clientName,
         status: lic.status,
         expiresAt: lic.expiresAt
     });
@@ -316,10 +439,33 @@ app.post('/api/license/heartbeat', (req, res) => {
 // ---------------------------------------------------------------------------
 
 // Get all licenses
-app.get('/api/admin/licenses', (req, res) => {
+app.get('/api/admin/licenses', async (req, res) => {
+    await ensureDbReady();
     const db = loadDatabase();
+    const now = Date.now();
+    let changed = false;
+
+    db.licenses.forEach(lic => {
+        if (!lic.expiresAt && Number(lic.durationDays) > 0) {
+            const baseTs = Number(lic.activatedAt) || Number(lic.createdAt) || now;
+            lic.expiresAt = baseTs + Number(lic.durationDays) * 24 * 60 * 60 * 1000;
+            changed = true;
+        }
+        if (lic.expiresAt && now > Number(lic.expiresAt) && lic.status === 'active') {
+            lic.status = 'expired';
+            lic.isLive = false;
+            lic.currentTiktokUser = null;
+            changed = true;
+        }
+    });
+
+    if (changed) {
+        saveDatabase(db);
+    }
+
     res.json({
         ok: true,
+        serverTime: now,
         count: db.licenses.length,
         licenses: db.licenses,
         boundDevices: db.boundDevices || {},
@@ -329,22 +475,32 @@ app.get('/api/admin/licenses', (req, res) => {
 });
 
 // Sync & restore licenses from browser localStorage or backup file (Preserves data when Render Free sleeps)
-app.post('/api/admin/licenses/sync-backup', (req, res) => {
+app.post('/api/admin/licenses/sync-backup', async (req, res) => {
+    await ensureDbReady();
     const { licenses, boundDevices } = req.body || {};
     if (!Array.isArray(licenses)) {
         return res.status(400).json({ ok: false, error: 'Invalid licenses data' });
     }
     const db = loadDatabase();
+    const now = Date.now();
     let restoredCount = 0;
 
     licenses.forEach(incoming => {
         if (!incoming || !incoming.code) return;
+        if (incoming.expiresAt && now > Number(incoming.expiresAt) && incoming.status === 'active') {
+            incoming.status = 'expired';
+        }
         const idx = db.licenses.findIndex(l => l.code === incoming.code);
         if (idx === -1) {
             db.licenses.push(incoming);
             restoredCount++;
         } else {
-            db.licenses[idx] = Object.assign({}, incoming, db.licenses[idx]);
+            const existing = db.licenses[idx];
+            // Never let an older cached backup resurrect an expired or disabled license
+            const preserveStatus = (existing.status === 'disabled' || existing.status === 'expired')
+                ? existing.status
+                : (incoming.status || existing.status);
+            db.licenses[idx] = Object.assign({}, incoming, existing, { status: preserveStatus });
         }
     });
 
@@ -364,7 +520,8 @@ app.post('/api/admin/licenses/sync-backup', (req, res) => {
 });
 
 // Create new license
-app.post('/api/admin/licenses/create', (req, res) => {
+app.post('/api/admin/licenses/create', async (req, res) => {
+    await ensureDbReady();
     const { clientName, durationDays, customCode } = req.body || {};
     const db = loadDatabase();
 
@@ -406,7 +563,8 @@ app.post('/api/admin/licenses/create', (req, res) => {
 });
 
 // Toggle Disable / Enable license
-app.post('/api/admin/licenses/:code/toggle-status', (req, res) => {
+app.post('/api/admin/licenses/:code/toggle-status', async (req, res) => {
+    await ensureDbReady();
     const { code } = req.params;
     const db = loadDatabase();
     const lic = db.licenses.find(l => l.code === code);
@@ -415,7 +573,17 @@ app.post('/api/admin/licenses/:code/toggle-status', (req, res) => {
         return res.status(404).json({ ok: false, error: 'License not found' });
     }
 
-    lic.status = (lic.status === 'disabled') ? 'active' : 'disabled';
+    if (lic.status === 'disabled') {
+        if (lic.expiresAt && Date.now() > Number(lic.expiresAt)) {
+            lic.status = 'expired';
+        } else {
+            lic.status = 'active';
+        }
+    } else {
+        lic.status = 'disabled';
+        lic.isLive = false;
+        lic.currentTiktokUser = null;
+    }
     saveDatabase(db);
     broadcastAdminUpdate();
 
@@ -424,7 +592,8 @@ app.post('/api/admin/licenses/:code/toggle-status', (req, res) => {
 
 // Unlock hardware / reset device lock
 // (Allows the user to re-bind or use a new code if authorized by admin)
-app.post('/api/admin/licenses/:code/unlock-device', (req, res) => {
+app.post('/api/admin/licenses/:code/unlock-device', async (req, res) => {
+    await ensureDbReady();
     const { code } = req.params;
     const db = loadDatabase();
     const lic = db.licenses.find(l => l.code === code);
@@ -450,10 +619,12 @@ app.post('/api/admin/licenses/:code/unlock-device', (req, res) => {
 });
 
 // Renew / Extend license expiration
-app.post('/api/admin/licenses/:code/renew', (req, res) => {
+app.post('/api/admin/licenses/:code/renew', async (req, res) => {
+    await ensureDbReady();
     const { code } = req.params;
     const { extendDays } = req.body || {};
-    const days = parseInt(extendDays, 10) || 30;
+    const parsedDays = parseInt(extendDays, 10);
+    const days = isNaN(parsedDays) ? 30 : parsedDays;
 
     const db = loadDatabase();
     const lic = db.licenses.find(l => l.code === code);
@@ -462,18 +633,31 @@ app.post('/api/admin/licenses/:code/renew', (req, res) => {
         return res.status(404).json({ ok: false, error: 'License not found' });
     }
 
-    const baseTime = (lic.expiresAt && lic.expiresAt > Date.now()) ? lic.expiresAt : Date.now();
-    lic.expiresAt = baseTime + days * 24 * 60 * 60 * 1000;
+    if (days === 0) {
+        lic.expiresAt = null;
+        lic.durationDays = 0;
+    } else {
+        const baseTime = (lic.expiresAt && lic.expiresAt > Date.now()) ? lic.expiresAt : Date.now();
+        lic.expiresAt = baseTime + days * 24 * 60 * 60 * 1000;
+        lic.durationDays = days;
+    }
     lic.status = 'active';
+    // Allow re-entering the renewed code on the bound PC if it was locked out after expiration
+    lic.deviceLocked = false;
 
     saveDatabase(db);
     broadcastAdminUpdate();
 
-    return res.json({ ok: true, expiresAt: lic.expiresAt, message: `Na-extend ng +${days} days ang lisensya.` });
+    return res.json({
+        ok: true,
+        expiresAt: lic.expiresAt,
+        message: days === 0 ? 'Ginawang Lifetime Access ang lisensya!' : `Na-extend ng +${days} days ang lisensya.`
+    });
 });
 
 // Delete license
-app.delete('/api/admin/licenses/:code', (req, res) => {
+app.delete('/api/admin/licenses/:code', async (req, res) => {
+    await ensureDbReady();
     const { code } = req.params;
     const db = loadDatabase();
     const idx = db.licenses.findIndex(l => l.code === code);
@@ -495,7 +679,8 @@ app.delete('/api/admin/licenses/:code', (req, res) => {
 });
 
 // Edit customer details / note
-app.post('/api/admin/licenses/:code/edit', (req, res) => {
+app.post('/api/admin/licenses/:code/edit', async (req, res) => {
+    await ensureDbReady();
     const { code } = req.params;
     const { clientName, notes, contactInfo } = req.body || {};
     const db = loadDatabase();
@@ -512,7 +697,8 @@ app.post('/api/admin/licenses/:code/edit', (req, res) => {
 });
 
 // Clear stream history
-app.post('/api/admin/licenses/:code/clear-history', (req, res) => {
+app.post('/api/admin/licenses/:code/clear-history', async (req, res) => {
+    await ensureDbReady();
     const { code } = req.params;
     const db = loadDatabase();
     const lic = db.licenses.find(l => l.code === code);
