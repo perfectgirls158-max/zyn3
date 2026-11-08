@@ -53,17 +53,24 @@ function loadLocalDatabaseFile() {
     try {
         if (fs.existsSync(DB_FILE)) {
             const raw = fs.readFileSync(DB_FILE, 'utf8');
-            return JSON.parse(raw);
+            const parsed = JSON.parse(raw);
+            return {
+                licenses: Array.isArray(parsed.licenses) ? parsed.licenses : [],
+                boundDevices: (parsed.boundDevices && typeof parsed.boundDevices === 'object') ? parsed.boundDevices : {},
+                clients: Array.isArray(parsed.clients) ? parsed.clients : []
+            };
         }
     } catch (e) {}
-    return { licenses: [], boundDevices: {} };
+    return { licenses: [], boundDevices: {}, clients: [] };
 }
 
 function loadDatabase() {
-    if (inMemoryDb) {
-        return inMemoryDb;
+    if (!inMemoryDb) {
+        inMemoryDb = loadLocalDatabaseFile();
     }
-    inMemoryDb = loadLocalDatabaseFile();
+    if (!Array.isArray(inMemoryDb.licenses)) inMemoryDb.licenses = [];
+    if (!inMemoryDb.boundDevices || typeof inMemoryDb.boundDevices !== 'object') inMemoryDb.boundDevices = {};
+    if (!Array.isArray(inMemoryDb.clients)) inMemoryDb.clients = [];
     return inMemoryDb;
 }
 
@@ -78,7 +85,7 @@ function saveDatabase(db) {
     if (isMongoConnected && mongoCollection) {
         mongoCollection.updateOne(
             { _id: 'global_state' },
-            { $set: { licenses: db.licenses, boundDevices: db.boundDevices, updatedAt: Date.now() } },
+            { $set: { licenses: db.licenses, boundDevices: db.boundDevices, clients: db.clients, updatedAt: Date.now() } },
             { upsert: true }
         ).catch(err => {
             console.error('[Database] Error saving to MongoDB:', err.message);
@@ -109,21 +116,22 @@ async function initMongoDB() {
         if (doc && Array.isArray(doc.licenses)) {
             inMemoryDb = {
                 licenses: doc.licenses,
-                boundDevices: doc.boundDevices || {}
+                boundDevices: doc.boundDevices || {},
+                clients: Array.isArray(doc.clients) ? doc.clients : []
             };
-            console.info(`[Database] ✓ Restored ${doc.licenses.length} licenses from MongoDB Atlas!`);
+            console.info(`[Database] ✓ Restored ${doc.licenses.length} licenses & ${inMemoryDb.clients.length} clients from MongoDB Atlas!`);
             broadcastAdminUpdate();
         } else {
             // Seed local into cloud
             const local = loadLocalDatabaseFile();
-            if (local.licenses.length > 0) {
+            if (local.licenses.length > 0 || local.clients.length > 0) {
                 await mongoCollection.updateOne(
                     { _id: 'global_state' },
-                    { $set: { licenses: local.licenses, boundDevices: local.boundDevices, updatedAt: Date.now() } },
+                    { $set: { licenses: local.licenses, boundDevices: local.boundDevices, clients: local.clients, updatedAt: Date.now() } },
                     { upsert: true }
                 );
                 inMemoryDb = local;
-                console.info(`[Database] ✓ Seeded ${local.licenses.length} existing licenses into MongoDB Atlas!`);
+                console.info(`[Database] ✓ Seeded ${local.licenses.length} existing licenses & ${local.clients.length} clients into MongoDB Atlas!`);
             }
         }
     } catch (err) {
@@ -160,44 +168,247 @@ app.get(['/', '/admin'], (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Broadcast updates ONLY to authenticated Admin Dashboard clients via WebSocket
+// ---------------------------------------------------------------------------
+// Multi-Tier Client & Super Admin Authentication Helpers
+// ---------------------------------------------------------------------------
+function generateClientToken(client) {
+    if (!client || !client.id) return '';
+    const raw = `CLIENT_${client.username}_${client.id}_${ACTIVATOR_SECRET_KEY}`;
+    return crypto.createHmac('sha256', CLOUD_RESPONSE_SECRET).update(raw).digest('hex');
+}
+
+function getClientByToken(token) {
+    if (!token) return null;
+    const db = loadDatabase();
+    return db.clients.find(c => generateClientToken(c) === token && c.status !== 'disabled') || null;
+}
+
+function getClientUsedQuota(db, username) {
+    if (!username) return 0;
+    return db.licenses.filter(l => l.createdBy === username).length;
+}
+
+function sanitizeClient(c, db) {
+    const used = getClientUsedQuota(db, c.username);
+    const limit = Number(c.maxLimit) || 0;
+    return {
+        id: c.id,
+        username: c.username,
+        password: c.password || '', // Visible to Super Admin in client management
+        name: c.name || c.username,
+        maxLimit: limit,
+        usedCount: used,
+        usedQuota: used,
+        remainingSlots: Math.max(0, limit - used),
+        status: c.status || 'active',
+        createdAt: c.createdAt || Date.now(),
+        lastSeenAt: c.lastSeenAt || null,
+        isOnline: !!c.isOnline
+    };
+}
+
+const onlineSockets = new Map(); // socket.id -> { username, name, role }
+
+function broadcastAdminUpdate() {
+    const db = loadDatabase();
+    // Super admins see ALL licenses
+    io.to('authorized_superadmins').emit('licenses_updated', db.licenses);
+    io.to('authorized_admins').emit('licenses_updated', db.licenses);
+
+    // Filter and broadcast to each active client their own licenses & quota
+    db.clients.forEach(client => {
+        const clientLicenses = db.licenses.filter(l => l.createdBy === client.username);
+        const used = clientLicenses.length;
+        const limit = Number(client.maxLimit) || 0;
+        io.to(`client_${client.username}`).emit('client_licenses_updated', {
+            licenses: clientLicenses,
+            quota: {
+                maxLimit: limit,
+                usedCount: used,
+                remainingSlots: Math.max(0, limit - used)
+            }
+        });
+    });
+}
+
+function broadcastClientsToSuperAdmin() {
+    const db = loadDatabase();
+    const sanitized = db.clients.map(c => sanitizeClient(c, db));
+    io.to('authorized_superadmins').emit('clients_updated', sanitized);
+}
+
+// Socket.io connection handling with real-time presence tracking
 io.on('connection', (socket) => {
-    const token = socket.handshake?.auth?.token || socket.handshake?.query?.token;
-    if (token === ADMIN_TOKEN) {
-        socket.join('authorized_admins');
-    }
-    socket.on('admin_auth', (clientToken) => {
+    const authenticateSocket = (clientToken) => {
+        if (!clientToken) return;
+        const db = loadDatabase();
+
         if (clientToken === ADMIN_TOKEN) {
+            socket.join('authorized_superadmins');
             socket.join('authorized_admins');
-            const db = loadDatabase();
+            socket.emit('auth_success', { role: 'superadmin', name: 'Master Super Admin' });
             socket.emit('licenses_updated', db.licenses);
+            socket.emit('clients_updated', db.clients.map(c => sanitizeClient(c, db)));
+            return;
+        }
+
+        const client = db.clients.find(c => generateClientToken(c) === clientToken);
+        if (client && client.status !== 'disabled') {
+            socket.join(`client_${client.username}`);
+            onlineSockets.set(socket.id, { username: client.username, name: client.name, role: 'client' });
+
+            // Mark client as online
+            client.isOnline = true;
+            client.lastSeenAt = Date.now();
+            saveDatabase(db);
+            broadcastClientsToSuperAdmin();
+
+            const clientLicenses = db.licenses.filter(l => l.createdBy === client.username);
+            const used = clientLicenses.length;
+            const limit = Number(client.maxLimit) || 0;
+            socket.emit('auth_success', {
+                role: 'client',
+                username: client.username,
+                name: client.name,
+                maxLimit: limit,
+                usedCount: used,
+                remainingSlots: Math.max(0, limit - used)
+            });
+            socket.emit('client_licenses_updated', {
+                licenses: clientLicenses,
+                quota: {
+                    maxLimit: limit,
+                    usedCount: used,
+                    remainingSlots: Math.max(0, limit - used)
+                }
+            });
+        }
+    };
+
+    const initialToken = socket.handshake?.auth?.token || socket.handshake?.query?.token;
+    if (initialToken) authenticateSocket(initialToken);
+
+    socket.on('admin_auth', (token) => authenticateSocket(token));
+    socket.on('client_auth', (token) => authenticateSocket(token));
+
+    socket.on('disconnect', () => {
+        if (onlineSockets.has(socket.id)) {
+            const { username } = onlineSockets.get(socket.id);
+            onlineSockets.delete(socket.id);
+
+            // Check if any other socket is still open for this client
+            const stillOnline = Array.from(onlineSockets.values()).some(s => s.username === username);
+            const db = loadDatabase();
+            const client = db.clients.find(c => c.username === username);
+            if (client) {
+                client.isOnline = stillOnline;
+                client.lastSeenAt = Date.now();
+                saveDatabase(db);
+                broadcastClientsToSuperAdmin();
+            }
         }
     });
 });
 
-function broadcastAdminUpdate() {
-    const db = loadDatabase();
-    io.to('authorized_admins').emit('licenses_updated', db.licenses);
-}
+// Unified Login Endpoint (Supports both Super Admin and Reseller Clients)
+app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body || {};
+    const u = String(username || '').trim().toLowerCase();
+    const p = String(password || '').trim();
 
-// Admin Login Endpoint
+    // 1. Check Super Admin
+    if ((u === 'admin' || !u) && p === ADMIN_PASSWORD) {
+        return res.json({
+            ok: true,
+            role: 'superadmin',
+            token: ADMIN_TOKEN,
+            name: 'Master Super Admin'
+        });
+    }
+
+    // 2. Check Reseller / Client account
+    const db = loadDatabase();
+    const client = db.clients.find(c => c.username.toLowerCase() === u && c.password === p);
+
+    if (client) {
+        if (client.status === 'disabled') {
+            return res.status(403).json({ ok: false, error: 'Ang account na ito ay naka-DISABLE ng Super Admin. Makipag-ugnayan sa provider.' });
+        }
+        client.lastSeenAt = Date.now();
+        client.isOnline = true;
+        saveDatabase(db);
+        broadcastClientsToSuperAdmin();
+
+        const token = generateClientToken(client);
+        return res.json({
+            ok: true,
+            role: 'client',
+            token,
+            client: sanitizeClient(client, db)
+        });
+    }
+
+    return res.status(401).json({ ok: false, error: 'Maling Username o Password!' });
+});
+
+// Backward-compatible Admin Login Endpoint
 app.post('/api/admin/login', (req, res) => {
-    const { password } = req.body || {};
-    if (String(password || '').trim() === ADMIN_PASSWORD) {
-        return res.json({ ok: true, token: ADMIN_TOKEN });
+    const { username, password } = req.body || {};
+    const u = String(username || '').trim().toLowerCase();
+    const p = String(password || '').trim();
+
+    if (p === ADMIN_PASSWORD && (!u || u === 'admin')) {
+        return res.json({ ok: true, role: 'superadmin', token: ADMIN_TOKEN, name: 'Master Super Admin' });
+    }
+    // Also allow client if they logged in with client password
+    const db = loadDatabase();
+    const client = db.clients.find(c => (u ? c.username.toLowerCase() === u : true) && c.password === p);
+    if (client) {
+        if (client.status === 'disabled') {
+            return res.status(403).json({ ok: false, error: 'Ang account na ito ay naka-DISABLE ng Super Admin.' });
+        }
+        const token = generateClientToken(client);
+        return res.json({ ok: true, role: 'client', token, client: sanitizeClient(client, db) });
     }
     return res.status(401).json({ ok: false, error: 'Maling Admin Password!' });
 });
 
-// Middleware to protect all /api/admin/* endpoints from unauthorized access (e.g. Wireshark/network snooping)
+// Middleware to protect /api/admin/* endpoints from unauthorized access
 function requireAdminAuth(req, res, next) {
     if (req.path === '/login') return next();
     const token = req.headers['x-admin-token'] || req.query.token || '';
-    if (token !== ADMIN_TOKEN) {
-        return res.status(401).json({ ok: false, unauthorized: true, error: 'Unauthorized: Admin login required.' });
+    if (!token) {
+        return res.status(401).json({ ok: false, unauthorized: true, error: 'Unauthorized: Login required.' });
     }
+
+    if (token === ADMIN_TOKEN) {
+        req.authRole = 'superadmin';
+        req.authUser = 'admin';
+        return next();
+    }
+
+    // Check if valid client token
+    const client = getClientByToken(token);
+    if (client) {
+        req.authRole = 'client';
+        req.authClient = client;
+        req.authUser = client.username;
+        return next();
+    }
+
+    return res.status(401).json({ ok: false, unauthorized: true, error: 'Unauthorized: Invalid token.' });
+}
+
+function requireSuperAdmin(req, res, next) {
+    const token = req.headers['x-admin-token'] || req.query.token || '';
+    if (token !== ADMIN_TOKEN) {
+        return res.status(403).json({ ok: false, error: 'Access denied: Super Admin master access only.' });
+    }
+    req.authRole = 'superadmin';
+    req.authUser = 'admin';
     next();
 }
+
 app.use('/api/admin', requireAdminAuth);
 
 // ---------------------------------------------------------------------------
@@ -438,7 +649,154 @@ app.post('/api/license/heartbeat', async (req, res) => {
 // ADMIN DASHBOARD REST APIs
 // ---------------------------------------------------------------------------
 
-// Get all licenses
+// ---------------------------------------------------------------------------
+// SUPER ADMIN RESELLER / CLIENT MANAGEMENT REST APIs
+// ---------------------------------------------------------------------------
+
+// 1. Get all client accounts with real-time online status and quota (Super Admin only)
+app.get('/api/superadmin/clients', requireSuperAdmin, async (req, res) => {
+    await ensureDbReady();
+    const db = loadDatabase();
+    return res.json({
+        ok: true,
+        count: db.clients.length,
+        clients: db.clients.map(c => sanitizeClient(c, db))
+    });
+});
+
+// 2. Create new client / reseller account
+app.post('/api/superadmin/clients/create', requireSuperAdmin, async (req, res) => {
+    await ensureDbReady();
+    const { username, password, name, maxLimit } = req.body || {};
+    const cleanUsername = String(username || '').trim().toLowerCase();
+    const cleanPass = String(password || '').trim();
+
+    if (!cleanUsername || cleanUsername.length < 3) {
+        return res.status(400).json({ ok: false, error: 'Ang username ay dapat hindi bababa sa 3 characters.' });
+    }
+    if (!/^[a-z0-9_-]+$/i.test(cleanUsername)) {
+        return res.status(400).json({ ok: false, error: 'Ang username ay letters, numbers, dash (-) at underscore (_) lamang.' });
+    }
+    if (!cleanPass || cleanPass.length < 4) {
+        return res.status(400).json({ ok: false, error: 'Ang password ay dapat hindi bababa sa 4 characters.' });
+    }
+
+    const db = loadDatabase();
+    if (db.clients.some(c => c.username.toLowerCase() === cleanUsername) || cleanUsername === 'admin') {
+        return res.status(400).json({ ok: false, error: `Mayroon nang account na may username na "${cleanUsername}". Pumili ng iba.` });
+    }
+
+    const limit = Math.max(1, parseInt(maxLimit, 10) || 10);
+    const newClient = {
+        id: 'cli_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        username: cleanUsername,
+        password: cleanPass,
+        name: String(name || cleanUsername).trim(),
+        maxLimit: limit,
+        status: 'active',
+        createdAt: Date.now(),
+        lastSeenAt: null,
+        isOnline: false
+    };
+
+    db.clients.unshift(newClient);
+    saveDatabase(db);
+    broadcastClientsToSuperAdmin();
+
+    return res.json({
+        ok: true,
+        message: `Matagumpay na nagawa ang client account para kay "${newClient.name}"!`,
+        client: sanitizeClient(newClient, db)
+    });
+});
+
+// 3. Edit client account (update limit, password, or name)
+app.post('/api/superadmin/clients/:id/edit', requireSuperAdmin, async (req, res) => {
+    await ensureDbReady();
+    const { id } = req.params;
+    const { name, password, maxLimit } = req.body || {};
+    const db = loadDatabase();
+    const client = db.clients.find(c => c.id === id || c.username === id);
+
+    if (!client) {
+        return res.status(404).json({ ok: false, error: 'Client account not found.' });
+    }
+
+    if (name) client.name = String(name).trim();
+    if (password && String(password).trim().length >= 4) {
+        client.password = String(password).trim();
+    }
+    if (typeof maxLimit !== 'undefined') {
+        client.maxLimit = Math.max(1, parseInt(maxLimit, 10) || 1);
+    }
+
+    saveDatabase(db);
+    broadcastClientsToSuperAdmin();
+    broadcastAdminUpdate();
+
+    return res.json({
+        ok: true,
+        message: `Na-update ang client account ni "${client.name}"!`,
+        client: sanitizeClient(client, db)
+    });
+});
+
+// 4. Toggle Disable / Enable client account
+app.post('/api/superadmin/clients/:id/toggle-status', requireSuperAdmin, async (req, res) => {
+    await ensureDbReady();
+    const { id } = req.params;
+    const db = loadDatabase();
+    const client = db.clients.find(c => c.id === id || c.username === id);
+
+    if (!client) {
+        return res.status(404).json({ ok: false, error: 'Client account not found.' });
+    }
+
+    client.status = (client.status === 'disabled') ? 'active' : 'disabled';
+    if (client.status === 'disabled') {
+        client.isOnline = false;
+        io.in(`client_${client.username}`).disconnectSockets(true);
+    }
+
+    saveDatabase(db);
+    broadcastClientsToSuperAdmin();
+    broadcastAdminUpdate();
+
+    return res.json({
+        ok: true,
+        status: client.status,
+        message: client.status === 'active' ? `Naka-enable na ang account ni "${client.name}".` : `Naka-disable na ang account ni "${client.name}".`
+    });
+});
+
+// 5. Delete client account
+app.delete('/api/superadmin/clients/:id', requireSuperAdmin, async (req, res) => {
+    await ensureDbReady();
+    const { id } = req.params;
+    const db = loadDatabase();
+    const idx = db.clients.findIndex(c => c.id === id || c.username === id);
+
+    if (idx === -1) {
+        return res.status(404).json({ ok: false, error: 'Client account not found.' });
+    }
+
+    const removed = db.clients.splice(idx, 1)[0];
+    io.in(`client_${removed.username}`).disconnectSockets(true);
+
+    saveDatabase(db);
+    broadcastClientsToSuperAdmin();
+
+    return res.json({
+        ok: true,
+        message: `Na-delete ang account ni "${removed.name}".`
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ADMIN / CLIENT DASHBOARD REST APIs
+// ---------------------------------------------------------------------------
+
+// Get licenses (Role-filtered: Client sees only their licenses; Super Admin sees all)
 app.get('/api/admin/licenses', async (req, res) => {
     await ensureDbReady();
     const db = loadDatabase();
@@ -463,11 +821,37 @@ app.get('/api/admin/licenses', async (req, res) => {
         saveDatabase(db);
     }
 
+    // Role: Reseller Client
+    if (req.authRole === 'client') {
+        const client = req.authClient;
+        const myLicenses = db.licenses.filter(l => l.createdBy === client.username);
+        const used = myLicenses.length;
+        const limit = Number(client.maxLimit) || 0;
+
+        return res.json({
+            ok: true,
+            role: 'client',
+            serverTime: now,
+            count: myLicenses.length,
+            licenses: myLicenses,
+            quota: {
+                maxLimit: limit,
+                usedCount: used,
+                remainingSlots: Math.max(0, limit - used)
+            },
+            client: sanitizeClient(client, db)
+        });
+    }
+
+    // Role: Super Admin (Master View)
     res.json({
         ok: true,
+        role: 'superadmin',
         serverTime: now,
         count: db.licenses.length,
         licenses: db.licenses,
+        clientsCount: db.clients.length,
+        clients: db.clients.map(c => sanitizeClient(c, db)),
         boundDevices: db.boundDevices || {},
         database: isMongoConnected ? 'mongodb' : 'local',
         mongoConnected: isMongoConnected
@@ -475,9 +859,9 @@ app.get('/api/admin/licenses', async (req, res) => {
 });
 
 // Sync & restore licenses from browser localStorage or backup file (Preserves data when Render Free sleeps)
-app.post('/api/admin/licenses/sync-backup', async (req, res) => {
+app.post('/api/admin/licenses/sync-backup', requireSuperAdmin, async (req, res) => {
     await ensureDbReady();
-    const { licenses, boundDevices } = req.body || {};
+    const { licenses, boundDevices, clients } = req.body || {};
     if (!Array.isArray(licenses)) {
         return res.status(400).json({ ok: false, error: 'Invalid licenses data' });
     }
@@ -496,7 +880,6 @@ app.post('/api/admin/licenses/sync-backup', async (req, res) => {
             restoredCount++;
         } else {
             const existing = db.licenses[idx];
-            // Never let an older cached backup resurrect an expired or disabled license
             const preserveStatus = (existing.status === 'disabled' || existing.status === 'expired')
                 ? existing.status
                 : (incoming.status || existing.status);
@@ -508,8 +891,19 @@ app.post('/api/admin/licenses/sync-backup', async (req, res) => {
         db.boundDevices = Object.assign({}, boundDevices, db.boundDevices);
     }
 
+    if (Array.isArray(clients)) {
+        clients.forEach(c => {
+            if (!c || !c.username) return;
+            const exIdx = db.clients.findIndex(x => x.username === c.username);
+            if (exIdx === -1) {
+                db.clients.push(c);
+            }
+        });
+    }
+
     saveDatabase(db);
     broadcastAdminUpdate();
+    broadcastClientsToSuperAdmin();
 
     return res.json({
         ok: true,
@@ -519,11 +913,39 @@ app.post('/api/admin/licenses/sync-backup', async (req, res) => {
     });
 });
 
-// Create new license
+// Create new license (Enforces quota limit for Clients)
 app.post('/api/admin/licenses/create', async (req, res) => {
     await ensureDbReady();
-    const { clientName, durationDays, customCode } = req.body || {};
+    const { clientName, durationDays, customCode, assignedClient } = req.body || {};
     const db = loadDatabase();
+    const now = Date.now();
+
+    let createdBy = 'superadmin';
+    let createdByName = 'Master Super Admin';
+
+    if (req.authRole === 'client') {
+        const client = req.authClient;
+        if (client.status === 'disabled') {
+            return res.status(403).json({ ok: false, error: 'Naka-disable ang iyong account. Makipag-ugnayan sa Super Admin.' });
+        }
+
+        const used = getClientUsedQuota(db, client.username);
+        const limit = Number(client.maxLimit) || 0;
+        if (limit > 0 && used >= limit) {
+            return res.status(403).json({
+                ok: false,
+                error: `Naabot mo na ang iyong limitasyon (${used}/${limit} activations). Makipag-ugnayan sa Super Admin upang mag-request ng karagdagang quota.`
+            });
+        }
+        createdBy = client.username;
+        createdByName = client.name || client.username;
+    } else if (req.authRole === 'superadmin' && assignedClient) {
+        const targetClient = db.clients.find(c => c.username === assignedClient || c.id === assignedClient);
+        if (targetClient) {
+            createdBy = targetClient.username;
+            createdByName = targetClient.name || targetClient.username;
+        }
+    }
 
     let code = String(customCode || '').replace(/\D/g, '').trim();
     if (code.length === 8) {
@@ -535,12 +957,14 @@ app.post('/api/admin/licenses/create', async (req, res) => {
     }
 
     const days = parseInt(durationDays, 10);
-    const expiresAt = (days && days > 0) ? (Date.now() + days * 24 * 60 * 60 * 1000) : null;
+    const expiresAt = (days && days > 0) ? (now + days * 24 * 60 * 60 * 1000) : null;
 
     const newLic = {
         code,
         clientName: String(clientName || 'Valued Customer').trim(),
-        createdAt: Date.now(),
+        createdBy,
+        createdByName,
+        createdAt: now,
         durationDays: days || 0, // 0 = Lifetime
         expiresAt,
         status: 'active',
@@ -559,7 +983,12 @@ app.post('/api/admin/licenses/create', async (req, res) => {
     saveDatabase(db);
     broadcastAdminUpdate();
 
-    return res.json({ ok: true, license: newLic });
+    return res.json({
+        ok: true,
+        license: newLic,
+        client: req.authRole === 'client' ? sanitizeClient(req.authClient, db) : null,
+        message: `Matagumpay na nagenerate ang activation code #${newLic.code}!`
+    });
 });
 
 // Toggle Disable / Enable license
@@ -571,6 +1000,11 @@ app.post('/api/admin/licenses/:code/toggle-status', async (req, res) => {
 
     if (!lic) {
         return res.status(404).json({ ok: false, error: 'License not found' });
+    }
+
+    // If client, verify ownership
+    if (req.authRole === 'client' && lic.createdBy !== req.authUser) {
+        return res.status(403).json({ ok: false, error: 'Wala kang permiso sa lisensyang ito.' });
     }
 
     if (lic.status === 'disabled') {
@@ -591,7 +1025,6 @@ app.post('/api/admin/licenses/:code/toggle-status', async (req, res) => {
 });
 
 // Unlock hardware / reset device lock
-// (Allows the user to re-bind or use a new code if authorized by admin)
 app.post('/api/admin/licenses/:code/unlock-device', async (req, res) => {
     await ensureDbReady();
     const { code } = req.params;
@@ -600,6 +1033,10 @@ app.post('/api/admin/licenses/:code/unlock-device', async (req, res) => {
 
     if (!lic) {
         return res.status(404).json({ ok: false, error: 'License not found' });
+    }
+
+    if (req.authRole === 'client' && lic.createdBy !== req.authUser) {
+        return res.status(403).json({ ok: false, error: 'Wala kang permiso sa lisensyang ito.' });
     }
 
     const previousDevice = lic.boundDeviceId;
@@ -633,6 +1070,10 @@ app.post('/api/admin/licenses/:code/renew', async (req, res) => {
         return res.status(404).json({ ok: false, error: 'License not found' });
     }
 
+    if (req.authRole === 'client' && lic.createdBy !== req.authUser) {
+        return res.status(403).json({ ok: false, error: 'Wala kang permiso sa lisensyang ito.' });
+    }
+
     if (days === 0) {
         lic.expiresAt = null;
         lic.durationDays = 0;
@@ -642,7 +1083,6 @@ app.post('/api/admin/licenses/:code/renew', async (req, res) => {
         lic.durationDays = days;
     }
     lic.status = 'active';
-    // Allow re-entering the renewed code on the bound PC if it was locked out after expiration
     lic.deviceLocked = false;
 
     saveDatabase(db);
@@ -655,8 +1095,8 @@ app.post('/api/admin/licenses/:code/renew', async (req, res) => {
     });
 });
 
-// Delete license
-app.delete('/api/admin/licenses/:code', async (req, res) => {
+// Delete license (Super Admin only)
+app.delete('/api/admin/licenses/:code', requireSuperAdmin, async (req, res) => {
     await ensureDbReady();
     const { code } = req.params;
     const db = loadDatabase();
@@ -687,6 +1127,10 @@ app.post('/api/admin/licenses/:code/edit', async (req, res) => {
     const lic = db.licenses.find(l => l.code === code);
     if (!lic) return res.status(404).json({ ok: false, error: 'License not found' });
 
+    if (req.authRole === 'client' && lic.createdBy !== req.authUser) {
+        return res.status(403).json({ ok: false, error: 'Wala kang permiso sa lisensyang ito.' });
+    }
+
     if (clientName) lic.clientName = String(clientName).trim();
     if (typeof notes !== 'undefined') lic.notes = String(notes).trim();
     if (typeof contactInfo !== 'undefined') lic.contactInfo = String(contactInfo).trim();
@@ -703,6 +1147,10 @@ app.post('/api/admin/licenses/:code/clear-history', async (req, res) => {
     const db = loadDatabase();
     const lic = db.licenses.find(l => l.code === code);
     if (!lic) return res.status(404).json({ ok: false, error: 'License not found' });
+
+    if (req.authRole === 'client' && lic.createdBy !== req.authUser) {
+        return res.status(403).json({ ok: false, error: 'Wala kang permiso sa lisensyang ito.' });
+    }
 
     lic.tiktokHistory = [];
     saveDatabase(db);
