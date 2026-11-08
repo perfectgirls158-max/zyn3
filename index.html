@@ -900,6 +900,48 @@
             padding: 50px 20px;
             color: #94a3b8;
         }
+
+        /* 2-Choice Unified Login Popup */
+        .login-tabs {
+            display: flex;
+            background: #f1f5f9;
+            border-radius: 12px;
+            padding: 4px;
+            gap: 6px;
+            margin-bottom: 20px;
+        }
+
+        .login-tab-btn {
+            flex: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 11px 12px;
+            border-radius: 9px;
+            font-size: 13px;
+            font-weight: 800;
+            color: #64748b;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        .login-tab-btn:hover {
+            color: #0f172a;
+        }
+
+        .login-tab-btn.active {
+            background: #ffffff;
+            color: #0f172a;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+        }
+
+        .login-tab-btn.active.admin-active {
+            color: #4f46e5;
+        }
     </style>
 </head>
 <body>
@@ -1245,31 +1287,6 @@
         </div>
     </div>
 
-    <!-- Master Super Admin Secret Passkey Modal (Triggered by Brand Logo Click) -->
-    <div class="modal-overlay" id="masterLoginModal" style="backdrop-filter: blur(8px); background: rgba(15, 23, 42, 0.85); z-index: 10000;">
-        <div class="modal-box" style="max-width: 420px; text-align: center; border: 2px solid rgba(99, 102, 241, 0.4);">
-            <div style="width: 58px; height: 58px; border-radius: 16px; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #ffffff; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px; box-shadow: 0 8px 20px -6px rgba(79, 70, 229, 0.5);">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                </svg>
-            </div>
-            <h2 class="modal-title" style="font-size: 20px;">👑 Master Super Admin Console</h2>
-            <p class="modal-sub">Lihim na Console para sa May-ari (Owner). Ilagay ang Super Admin Password upang kontrolin ang lahat ng Reseller accounts at licenses.</p>
-            <form id="masterLoginForm" onsubmit="event.preventDefault(); submitMasterLogin();">
-                <div class="form-group" style="text-align: left;">
-                    <label class="form-label">Super Admin Password</label>
-                    <input type="password" id="masterPasswordInput" class="form-control" placeholder="••••••••••••" required autocomplete="current-password">
-                </div>
-                <div id="masterLoginError" style="display:none; color:#dc2626; font-size:12px; font-weight:700; margin-bottom:12px;"></div>
-                <div class="modal-actions" style="margin-top: 14px;">
-                    <button type="button" class="btn btn-outline" onclick="closeMasterLoginModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);">
-                        <span>Buksan ang Super Admin Console</span>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
 
     <!-- Create Reseller Modal (Super Admin Only) -->
     <div class="modal-overlay" id="createResellerModal">
@@ -1343,29 +1360,63 @@
         </div>
     </div>
 
-    <!-- Admin / Reseller Security Login Modal -->
-    <div class="modal-overlay" id="adminLoginModal" style="backdrop-filter: blur(8px); background: rgba(15, 23, 42, 0.78); z-index: 9999;">
-        <div class="modal-box" style="max-width: 400px; text-align: center;">
-            <div style="width: 52px; height: 52px; border-radius: 14px; background: #eef2ff; color: #4f46e5; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                </svg>
+    <!-- Unified 2-Choice Login Modal (Admin vs Clients) -->
+    <div class="modal-overlay" id="adminLoginModal" style="backdrop-filter: blur(10px); background: rgba(15, 23, 42, 0.82); z-index: 9999;">
+        <div class="modal-box" style="max-width: 440px; padding: 32px 28px;">
+            <!-- Brand Icon & Header -->
+            <div style="text-align: center; margin-bottom: 20px;">
+                <div style="width: 58px; height: 58px; border-radius: 16px; background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); color: #ffffff; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; box-shadow: 0 8px 22px -6px rgba(79, 70, 229, 0.5);">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                </div>
+                <h2 class="modal-title" style="font-size: 21px; font-weight: 800; margin-bottom: 4px;">ZYN Activator Cloud Access</h2>
+                <p class="modal-sub" style="margin-bottom: 0;">Pumili sa ibaba kung ikaw ang May-ari (Admin) o Client / Reseller.</p>
             </div>
-            <h2 class="modal-title">ZYN Activator Login</h2>
-            <p class="modal-sub">Mag-login gamit ang iyong Reseller o Admin account upang ma-access ang generator.</p>
-            <form id="adminLoginForm" onsubmit="event.preventDefault(); submitAdminLogin();">
+
+            <!-- 2 Choices Tab Switcher -->
+            <div class="login-tabs">
+                <button type="button" class="login-tab-btn active" id="btnLoginTabClient" onclick="switchLoginMode('client')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    <span>👥 Clients / Reseller</span>
+                </button>
+                <button type="button" class="login-tab-btn" id="btnLoginTabAdmin" onclick="switchLoginMode('admin')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                    <span>👑 Master Admin</span>
+                </button>
+            </div>
+
+            <!-- Choice 1: Clients / Reseller (Yung mga nagawan ng username at pass) -->
+            <form id="clientLoginForm" onsubmit="event.preventDefault(); submitClientAuth();">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 11px 14px; margin-bottom: 16px; font-size: 12px; color: #475569; line-height: 1.4;">
+                    👥 <b>Client / Reseller Portal:</b> Ilagay ang iyong ibinigay na Username at Password upang makapag-generate ng 8-digit activation codes.
+                </div>
                 <div class="form-group" style="text-align: left;">
-                    <label class="form-label">Username (Iwanang blank kung Master Admin)</label>
-                    <input type="text" id="adminUsernameInput" class="form-control" placeholder="hal. juan123 o admin" autocomplete="username">
+                    <label class="form-label">Client Username</label>
+                    <input type="text" id="clientUsernameInput" class="form-control" placeholder="hal. juan123" autocomplete="username">
                 </div>
                 <div class="form-group" style="text-align: left;">
                     <label class="form-label">Password</label>
-                    <input type="password" id="adminPasswordInput" class="form-control" placeholder="••••••••••••" required autocomplete="current-password">
+                    <input type="password" id="clientPasswordInput" class="form-control" placeholder="••••••••••••" autocomplete="current-password">
                 </div>
-                <div id="adminLoginError" style="display:none; color:#dc2626; font-size:12px; font-weight:700; margin-bottom:12px;"></div>
-                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; height: 44px;">
-                    <span>Buksan ang Dashboard</span>
+                <div id="clientAuthError" style="display:none; color:#dc2626; font-size:12px; font-weight:700; margin-bottom:12px;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; height: 44px; margin-top: 6px;">
+                    <span>Buksan ang Client Portal</span>
+                </button>
+            </form>
+
+            <!-- Choice 2: Master Super Admin (Ikaw Lang / May-ari) -->
+            <form id="adminMasterLoginForm" style="display: none;" onsubmit="event.preventDefault(); submitMasterAdminAuth();">
+                <div style="background: #eef2ff; border: 1px solid #e0e7ff; border-radius: 10px; padding: 11px 14px; margin-bottom: 16px; font-size: 12px; color: #3730a3; line-height: 1.4;">
+                    👑 <b>Master Super Admin Only (May-ari):</b> Buong kontrol sa lahat ng PC, licenses, monitoring ng online clients, at pagtatakda ng quota limit.
+                </div>
+                <div class="form-group" style="text-align: left;">
+                    <label class="form-label">Master Admin Password</label>
+                    <input type="password" id="masterAdminPasswordInput" class="form-control" placeholder="••••••••••••" autocomplete="current-password">
+                </div>
+                <div id="masterAuthError" style="display:none; color:#dc2626; font-size:12px; font-weight:700; margin-bottom:12px;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; height: 44px; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); margin-top: 6px;">
+                    <span>Buksan ang Master Admin Console</span>
                 </button>
             </form>
         </div>
@@ -1379,6 +1430,7 @@
         let currentRole = localStorage.getItem('zyn_role') || null;
         let currentClientData = null;
         let activeTab = 'licenses'; // 'licenses' | 'clients'
+        let currentLoginMode = 'client'; // 'client' | 'admin'
 
         try {
             const rawClient = localStorage.getItem('zyn_client_data');
@@ -1503,77 +1555,45 @@
             return res;
         }
 
-        /* Discreet Brand Logo Click Handler (Secret Super Admin Entry) */
-        function handleBrandLogoClick() {
-            if (currentRole === 'superadmin') {
-                // Quick toggle view between Licenses and Resellers
-                switchSuperAdminTab(activeTab === 'licenses' ? 'clients' : 'licenses');
+        /* 2-Choice Login Switcher Functions */
+        function switchLoginMode(mode) {
+            currentLoginMode = mode;
+            const tabAdmin = document.getElementById('btnLoginTabAdmin');
+            const tabClient = document.getElementById('btnLoginTabClient');
+            const formAdmin = document.getElementById('adminMasterLoginForm');
+            const formClient = document.getElementById('clientLoginForm');
+            const errMaster = document.getElementById('masterAuthError');
+            const errClient = document.getElementById('clientAuthError');
+
+            if (errMaster) errMaster.style.display = 'none';
+            if (errClient) errClient.style.display = 'none';
+
+            if (mode === 'admin') {
+                if (tabAdmin) tabAdmin.classList.add('active', 'admin-active');
+                if (tabClient) tabClient.classList.remove('active');
+                if (formAdmin) formAdmin.style.display = 'block';
+                if (formClient) formClient.style.display = 'none';
+                setTimeout(() => {
+                    const p = document.getElementById('masterAdminPasswordInput');
+                    if (p) { p.value = ''; p.focus(); }
+                }, 50);
             } else {
-                // Open secret Master Super Admin modal
-                openMasterLoginModal();
+                if (tabClient) tabClient.classList.add('active');
+                if (tabAdmin) tabAdmin.classList.remove('active', 'admin-active');
+                if (formClient) formClient.style.display = 'block';
+                if (formAdmin) formAdmin.style.display = 'none';
+                setTimeout(() => {
+                    const u = document.getElementById('clientUsernameInput');
+                    if (u) { u.focus(); }
+                }, 50);
             }
         }
 
-        function openMasterLoginModal() {
-            const modal = document.getElementById('masterLoginModal');
+        function openAdminLoginModal(defaultMode = 'client') {
+            const modal = document.getElementById('adminLoginModal');
             if (modal) {
                 modal.classList.add('open');
-                setTimeout(() => {
-                    const inp = document.getElementById('masterPasswordInput');
-                    if (inp) { inp.value = ''; inp.focus(); }
-                }, 100);
-            }
-        }
-
-        function closeMasterLoginModal() {
-            const modal = document.getElementById('masterLoginModal');
-            if (modal) modal.classList.remove('open');
-        }
-
-        async function submitMasterLogin() {
-            const inp = document.getElementById('masterPasswordInput');
-            const errBox = document.getElementById('masterLoginError');
-            const password = inp ? inp.value.trim() : '';
-            if (!password) return;
-
-            try {
-                const res = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: 'admin', password })
-                });
-                const data = await res.json();
-                if (data.ok && data.token) {
-                    setAuthSession(data.token, 'superadmin', null);
-                    if (errBox) errBox.style.display = 'none';
-                    closeMasterLoginModal();
-                    closeAdminLoginModal();
-                    socket.emit('admin_auth', data.token);
-                    switchSuperAdminTab('clients');
-                    fetchLicenses();
-                    fetchResellers();
-                } else {
-                    if (errBox) {
-                        errBox.textContent = data.error || 'Maling Super Admin Password!';
-                        errBox.style.display = 'block';
-                    }
-                }
-            } catch (err) {
-                if (errBox) {
-                    errBox.textContent = 'Network error: ' + err.message;
-                    errBox.style.display = 'block';
-                }
-            }
-        }
-
-        function openAdminLoginModal() {
-            const modal = document.getElementById('adminLoginModal');
-            if (modal && !modal.classList.contains('open')) {
-                modal.classList.add('open');
-                setTimeout(() => {
-                    const uInp = document.getElementById('adminUsernameInput');
-                    if (uInp) uInp.focus();
-                }, 100);
+                switchLoginMode(defaultMode);
             }
         }
 
@@ -1582,13 +1602,21 @@
             if (modal) modal.classList.remove('open');
         }
 
-        async function submitAdminLogin() {
-            const uInp = document.getElementById('adminUsernameInput');
-            const pInp = document.getElementById('adminPasswordInput');
-            const errBox = document.getElementById('adminLoginError');
+        /* Choice 1: Client / Reseller Login */
+        async function submitClientAuth() {
+            const uInp = document.getElementById('clientUsernameInput');
+            const pInp = document.getElementById('clientPasswordInput');
+            const errBox = document.getElementById('clientAuthError');
             const username = uInp ? uInp.value.trim() : '';
             const password = pInp ? pInp.value.trim() : '';
-            if (!password) return;
+
+            if (!username || !password) {
+                if (errBox) {
+                    errBox.textContent = 'Paki-lagay ang iyong Client Username at Password!';
+                    errBox.style.display = 'block';
+                }
+                return;
+            }
 
             try {
                 const res = await fetch('/api/auth/login', {
@@ -1608,7 +1636,7 @@
                     fetchLicenses();
                 } else {
                     if (errBox) {
-                        errBox.textContent = data.error || 'Maling Username o Password!';
+                        errBox.textContent = data.error || 'Maling Client Username o Password!';
                         errBox.style.display = 'block';
                     }
                 }
@@ -1617,6 +1645,60 @@
                     errBox.textContent = 'Network error: ' + err.message;
                     errBox.style.display = 'block';
                 }
+            }
+        }
+
+        /* Choice 2: Master Super Admin Login */
+        async function submitMasterAdminAuth() {
+            const pInp = document.getElementById('masterAdminPasswordInput');
+            const errBox = document.getElementById('masterAuthError');
+            const password = pInp ? pInp.value.trim() : '';
+
+            if (!password) {
+                if (errBox) {
+                    errBox.textContent = 'Paki-lagay ang Master Admin Password!';
+                    errBox.style.display = 'block';
+                }
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'admin', password })
+                });
+                const data = await res.json();
+                if (data.ok && data.token) {
+                    setAuthSession(data.token, 'superadmin', null);
+                    if (errBox) errBox.style.display = 'none';
+                    closeAdminLoginModal();
+                    socket.emit('admin_auth', data.token);
+                    switchSuperAdminTab('clients');
+                    fetchLicenses();
+                    fetchResellers();
+                } else {
+                    if (errBox) {
+                        errBox.textContent = data.error || 'Maling Master Admin Password!';
+                        errBox.style.display = 'block';
+                    }
+                }
+            } catch (err) {
+                if (errBox) {
+                    errBox.textContent = 'Network error: ' + err.message;
+                    errBox.style.display = 'block';
+                }
+            }
+        }
+
+        /* Discreet Brand Logo Click Handler (Secret Super Admin Entry) */
+        function handleBrandLogoClick() {
+            if (currentRole === 'superadmin') {
+                // Quick toggle view between Licenses and Resellers
+                switchSuperAdminTab(activeTab === 'licenses' ? 'clients' : 'licenses');
+            } else {
+                // Open login modal with Master Admin tab pre-selected
+                openAdminLoginModal('admin');
             }
         }
 
