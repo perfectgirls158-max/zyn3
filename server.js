@@ -9,7 +9,7 @@ const { MongoClient } = require('mongodb');
 
 const ACTIVATOR_SECRET_KEY = process.env.ACTIVATOR_SECRET_KEY || 'ZYN_ACTIVATOR_SECRET_KEY_2026';
 const CLOUD_RESPONSE_SECRET = 'ZYN_CLOUD_CHALLENGE_SIGN_2026_' + ACTIVATOR_SECRET_KEY;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ZynAdmin2026';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'geo123';
 const ADMIN_TOKEN = crypto.createHmac('sha256', CLOUD_RESPONSE_SECRET).update('ADMIN_SESSION_' + ADMIN_PASSWORD).digest('hex');
 
 function computeCloudResponseSignature({ deviceId, code, active, status, expiresAt, serverTime, nonce }) {
