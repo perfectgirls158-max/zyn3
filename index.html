@@ -20,23 +20,34 @@
             --primary-hover: #1e293b;
             --accent: #4f46e5;
             --accent-light: #eef2ff;
+            --apple-blue: #007aff;
+            --apple-indigo: #5856d6;
+            --apple-green: #34c759;
+            --apple-red: #ff3b30;
+            --apple-orange: #ff9500;
             --success: #16a34a;
             --success-bg: #f0fdf4;
             --danger: #dc2626;
             --danger-bg: #fef2f2;
             --warning: #d97706;
             --warning-bg: #fffbeb;
-            --card-border: #e2e8f0;
-            --bg-page: #f8fafc;
+            --card-border: rgba(0, 0, 0, 0.08);
+            --bg-page: #f2f2f7;
         }
 
         body {
-            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Plus Jakarta Sans", system-ui, sans-serif;
             background-color: var(--bg-page);
             color: #0f172a;
             min-height: 100vh;
-            padding: 28px 24px;
+            padding: 24px 20px;
             -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        button:active, .btn:active, .code-pill:active, .password-badge:active, .filter-tab:active {
+            transform: scale(0.96);
+            transition: transform 0.1s ease;
         }
 
         .container {
@@ -942,9 +953,357 @@
         .login-tab-btn.active.admin-active {
             color: #4f46e5;
         }
+
+        /* iOS Dynamic Island Style Toast */
+        .ios-toast {
+            position: fixed;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-80px);
+            background: rgba(15, 23, 42, 0.94);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            color: #ffffff;
+            padding: 10px 22px;
+            border-radius: 9999px;
+            font-size: 13.5px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3);
+            z-index: 100000;
+            opacity: 0;
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            pointer-events: none;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .ios-toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        /* Mobile Bottom Bar (Hidden on desktop) */
+        .mobile-bottom-bar {
+            display: none;
+        }
+
+        /* =========================================================
+           iOS Mobile View Responsive Styles (Apple Cupertino Theme)
+           ========================================================= */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px 10px 92px 10px;
+                background-color: #f2f2f7;
+            }
+
+            .container {
+                max-width: 100%;
+            }
+
+            /* Sticky Frosted Glass Top Bar */
+            .top-bar {
+                position: sticky;
+                top: 8px;
+                z-index: 900;
+                background: rgba(255, 255, 255, 0.88);
+                backdrop-filter: blur(20px);
+                -webkit-backdrop-filter: blur(20px);
+                border: 1px solid rgba(0, 0, 0, 0.07);
+                border-radius: 20px;
+                padding: 12px 14px;
+                margin-bottom: 14px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+                gap: 10px;
+            }
+
+            .brand-section {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .brand-title h1 {
+                font-size: 17px;
+                line-height: 1.2;
+            }
+
+            .brand-meta-pills {
+                display: none; /* Keep header clean and focused on mobile */
+            }
+
+            .header-actions {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                overflow-x: auto;
+                padding-bottom: 2px;
+                scrollbar-width: none;
+            }
+            .header-actions::-webkit-scrollbar { display: none; }
+
+            .header-actions .btn {
+                padding: 7px 12px;
+                font-size: 12px;
+                border-radius: 10px;
+            }
+
+            /* Desktop generate button in header hidden on mobile since it's in the floating bottom bar */
+            #btnMainGenerateCode {
+                display: none !important;
+            }
+
+            /* Super Admin Segmented Control */
+            .superadmin-nav-tabs {
+                width: 100%;
+                display: flex;
+                background: rgba(120, 120, 128, 0.12);
+                border-radius: 12px;
+                padding: 3px;
+                border: none;
+            }
+
+            .superadmin-nav-tab {
+                flex: 1;
+                justify-content: center;
+                padding: 8px 10px;
+                font-size: 12px;
+                border-radius: 9px;
+            }
+
+            /* 2-Column iOS Widget Grid for Stats */
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                margin-bottom: 14px;
+            }
+
+            .stat-card {
+                border-radius: 18px;
+                padding: 14px;
+                background: #ffffff;
+                border: 1px solid rgba(0, 0, 0, 0.05);
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+            }
+
+            .stat-val {
+                font-size: 24px;
+            }
+            .stat-label {
+                font-size: 9px;
+            }
+            .stat-sub {
+                display: none; /* cleaner widget look */
+            }
+            .stat-icon {
+                width: 36px;
+                height: 36px;
+                border-radius: 10px;
+            }
+
+            /* Main Card Container iOS Inset Style */
+            .main-card {
+                background: transparent;
+                border: none;
+                box-shadow: none;
+                border-radius: 0;
+                overflow: visible;
+            }
+
+            .filter-nav {
+                background: rgba(255, 255, 255, 0.9);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border-radius: 16px;
+                border: 1px solid rgba(0, 0, 0, 0.06);
+                padding: 5px;
+                margin-bottom: 12px;
+                scrollbar-width: none;
+            }
+            .filter-nav::-webkit-scrollbar { display: none; }
+
+            .filter-tab {
+                padding: 7px 11px;
+                font-size: 11.5px;
+            }
+
+            .toolbar {
+                background: #ffffff;
+                border-radius: 16px;
+                border: 1px solid rgba(0, 0, 0, 0.06);
+                padding: 12px 14px;
+                margin-bottom: 12px;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+            }
+
+            .toolbar-info {
+                width: 100%;
+                margin-bottom: 4px;
+                font-size: 12px;
+            }
+
+            .search-wrap {
+                width: 100%;
+            }
+            .search-input {
+                width: 100%;
+                height: 40px;
+                border-radius: 12px;
+                background: #f1f2f6;
+                border: 1px solid transparent;
+            }
+            .search-input:focus {
+                background: #ffffff;
+                border-color: #007aff;
+            }
+
+            /* =========================================================
+               iOS Table-to-Card Transformation (Every row is an iOS Card!)
+               ========================================================= */
+            .table-responsive {
+                overflow-x: visible;
+            }
+
+            table, thead, tbody, tr, td, th {
+                display: block;
+                width: 100%;
+            }
+
+            thead {
+                display: none !important;
+            }
+
+            tbody tr {
+                background: #ffffff;
+                border-radius: 20px;
+                border: 1px solid rgba(0, 0, 0, 0.06);
+                box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03);
+                margin-bottom: 14px;
+                padding: 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                transition: transform 0.15s ease, box-shadow 0.15s ease;
+            }
+
+            tbody tr:active {
+                transform: scale(0.99);
+            }
+
+            tbody td {
+                padding: 0 !important;
+                border-bottom: none !important;
+            }
+
+            /* Card Header Section: Customer & 8-Digit Code */
+            .cust-cell {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 8px;
+                border-bottom: 1px solid #f1f5f9;
+                padding-bottom: 10px;
+            }
+
+            .cust-name {
+                font-size: 14.5px;
+                font-weight: 800;
+            }
+
+            .code-pill {
+                font-size: 15px;
+                padding: 4px 12px;
+                background: #eef2ff;
+                border: 1px solid #c7d2fe;
+                border-radius: 8px;
+                color: #4338ca;
+            }
+
+            /* Actions bar on mobile */
+            .actions-flex {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 6px;
+                width: 100%;
+                border-top: 1px solid #f1f5f9;
+                padding-top: 10px;
+                margin-top: 4px;
+            }
+
+            .btn-sm {
+                width: 100%;
+                justify-content: center;
+                padding: 8px 4px;
+                font-size: 11.5px;
+                border-radius: 9px;
+            }
+
+            /* Floating iOS Bottom Bar */
+            .mobile-bottom-bar {
+                display: flex;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: rgba(255, 255, 255, 0.9);
+                backdrop-filter: blur(24px);
+                -webkit-backdrop-filter: blur(24px);
+                border-top: 0.5px solid rgba(0, 0, 0, 0.12);
+                padding: 10px 16px max(12px, env(safe-area-inset-bottom)) 16px;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                z-index: 1000;
+                box-shadow: 0 -4px 25px rgba(0, 0, 0, 0.06);
+            }
+
+            .mobile-bottom-info {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .btn-mobile-action {
+                height: 44px;
+                padding: 0 18px;
+                border-radius: 14px;
+                font-size: 13.5px;
+                font-weight: 800;
+                background: linear-gradient(135deg, #4f46e5 0%, #007aff 100%);
+                color: #ffffff;
+                box-shadow: 0 4px 15px rgba(0, 122, 255, 0.35);
+            }
+
+            /* Modals: iOS Bottom Sheet / Cupertino Sheet */
+            .modal-overlay {
+                align-items: flex-end;
+                padding: 0;
+            }
+
+            .modal-box {
+                max-width: 100% !important;
+                border-radius: 28px 28px 0 0 !important;
+                padding: 24px 20px max(24px, env(safe-area-inset-bottom)) 20px !important;
+                margin: 0 !important;
+                animation: slideUpCupertino 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+            }
+
+            @keyframes slideUpCupertino {
+                from { transform: translateY(100%); }
+                to { transform: translateY(0); }
+            }
+        }
     </style>
 </head>
 <body>
+
+    <!-- iOS Dynamic Island Style Toast -->
+    <div id="iosToast" class="ios-toast">
+        <span id="iosToastIcon">✓</span>
+        <span id="iosToastText">Action Successful</span>
+    </div>
 
     <div class="container">
         <!-- Top Navigation Bar -->
@@ -1477,6 +1836,12 @@
             const btnMainGen = document.getElementById('btnMainGenerateCode');
             const btnMainGenText = document.getElementById('btnMainGenerateText');
 
+            // Mobile Bottom Action Bar elements
+            const mobileRole = document.getElementById('mobileBottomRoleText');
+            const mobileSub = document.getElementById('mobileBottomSubText');
+            const mobileBtn = document.getElementById('btnMobileAction');
+            const mobileBtnText = document.getElementById('btnMobileActionText');
+
             if (currentRole === 'superadmin') {
                 if (roleBadge) roleBadge.style.display = 'inline-flex';
                 if (clientQuotaBadge) clientQuotaBadge.style.display = 'none';
@@ -1491,6 +1856,20 @@
                     btnMainGen.title = 'Gumawa ng bagong license';
                 }
                 if (btnMainGenText) btnMainGenText.textContent = 'Gumawa ng 8-Digit Code';
+
+                if (mobileRole && mobileSub && mobileBtn && mobileBtnText) {
+                    mobileRole.textContent = '👑 MASTER ADMIN';
+                    if (activeTab === 'clients') {
+                        const onlineCount = (allClients || []).filter(c => c.isOnline).length;
+                        mobileSub.textContent = `${(allClients || []).length} Resellers (${onlineCount} Online)`;
+                        mobileBtnText.textContent = '+ New Reseller';
+                        mobileBtn.disabled = false;
+                    } else {
+                        mobileSub.textContent = `${allLicenses.length} Total Licenses`;
+                        mobileBtnText.textContent = '+ 8-Digit Code';
+                        mobileBtn.disabled = false;
+                    }
+                }
             } else if (currentRole === 'client') {
                 if (roleBadge) roleBadge.style.display = 'none';
                 if (clientQuotaBadge) clientQuotaBadge.style.display = 'inline-flex';
@@ -1511,18 +1890,25 @@
                     const max = currentClientData.maxLimit || 0;
                     if (clientQuotaBadge) clientQuotaBadge.textContent = `Limit: ${used}/${max} Used`;
 
+                    if (mobileRole) mobileRole.textContent = `👤 ${name.toUpperCase()}`;
+                    if (mobileSub) mobileSub.textContent = `Quota: ${used}/${max} used`;
+
                     if (used >= max) {
                         if (btnMainGen) {
                             btnMainGen.disabled = true;
                             btnMainGen.title = 'Naabot mo na ang iyong quota limit. Makipag-ugnayan sa Super Admin para mag-upgrade.';
                         }
                         if (btnMainGenText) btnMainGenText.textContent = `Quota Full (${used}/${max})`;
+                        if (mobileBtnText) mobileBtnText.textContent = 'Quota Full';
+                        if (mobileBtn) mobileBtn.disabled = true;
                     } else {
                         if (btnMainGen) {
                             btnMainGen.disabled = false;
                             btnMainGen.title = '';
                         }
                         if (btnMainGenText) btnMainGenText.textContent = 'Gumawa ng 8-Digit Code';
+                        if (mobileBtnText) mobileBtnText.textContent = '+ 8-Digit Code';
+                        if (mobileBtn) mobileBtn.disabled = false;
                     }
                 }
             } else {
@@ -1727,6 +2113,7 @@
                 if (tabClients) tabClients.classList.add('active');
                 fetchResellers();
             }
+            applyRoleUI();
         }
 
         /* Reseller Management Functions */
@@ -1876,13 +2263,13 @@
                 if (data.ok) {
                     closeCreateResellerModal();
                     document.getElementById('createResellerForm').reset();
-                    alert(`✓ Tagumpay! Nalikha ang Reseller account para kay: ${data.client.name}`);
+                    showIosToast(`✓ Nalikha ang account para kay: ${data.client.name}`, '👥');
                     fetchResellers();
                 } else {
-                    alert('Error: ' + data.error);
+                    showIosToast('Error: ' + data.error, '❌');
                 }
             } catch (e) {
-                alert('Error: ' + e.message);
+                showIosToast('Error: ' + e.message, '❌');
             }
         }
 
@@ -1916,13 +2303,13 @@
                 const data = await res.json();
                 if (data.ok) {
                     closeEditResellerModal();
-                    alert('✓ Na-update ang detalye ng Reseller account!');
+                    showIosToast('✓ Na-update ang detalye ng Reseller account!', '✓');
                     fetchResellers();
                 } else {
-                    alert('Error: ' + data.error);
+                    showIosToast('Error: ' + data.error, '❌');
                 }
             } catch (e) {
-                alert('Error: ' + e.message);
+                showIosToast('Error: ' + e.message, '❌');
             }
         }
 
@@ -1931,12 +2318,13 @@
                 const res = await adminFetch(`/api/superadmin/clients/${id}/toggle-status`, { method: 'POST' });
                 const d = await res.json();
                 if (d.ok) {
+                    showIosToast('Na-update ang status ng Reseller account!', '🔄');
                     fetchResellers();
                 } else {
-                    alert('Error: ' + d.error);
+                    showIosToast('Error: ' + d.error, '❌');
                 }
             } catch (e) {
-                alert('Action failed: ' + e.message);
+                showIosToast('Action failed: ' + e.message, '❌');
             }
         }
 
@@ -2490,14 +2878,42 @@
             const expText = expiresAt ? new Date(expiresAt).toLocaleDateString() : 'Lifetime Access';
             const msg = `Hello ${name}!\n\nIto ang iyong opisyal na 8-Digit Activation Code para sa TikTok Live Stream Tools (ZYN TOOL):\n\n👉 CODE: ${code}\nValidity: ${expText}\n\nI-paste lang ang 8-digit code sa activation screen ng app para mag-unlock. Salamat!`;
             navigator.clipboard.writeText(msg).then(() => {
-                alert(`Nakopya na sa clipboard ang mensahe para kay ${name}! Pwede mo na itong i-paste sa Messenger o Telegram.`);
+                showIosToast(`Kopya na ang mensahe para kay ${name}!`, '📋');
+            }).catch(() => {
+                alert(`Kopya na ang 8-Digit Code: ${code}`);
             });
         }
 
         function copyText(txt) {
             navigator.clipboard.writeText(txt).then(() => {
-                alert(`Kopya na sa clipboard: ${txt}`);
+                showIosToast(`Kopya na ang code: ${txt}`, '🔑');
+            }).catch(() => {
+                showIosToast(txt, '🔑');
             });
+        }
+
+        /* iOS Dynamic Island Toast Notification */
+        function showIosToast(msg, icon = '✓') {
+            const toast = document.getElementById('iosToast');
+            const txt = document.getElementById('iosToastText');
+            const ic = document.getElementById('iosToastIcon');
+            if (!toast) return;
+            if (txt) txt.textContent = msg;
+            if (ic) ic.textContent = icon;
+            toast.classList.add('show');
+            clearTimeout(window.__toastTimer);
+            window.__toastTimer = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2600);
+        }
+
+        /* Mobile Bottom Action Handler */
+        function handleMobileMainAction() {
+            if (currentRole === 'superadmin' && activeTab === 'clients') {
+                openCreateResellerModal();
+            } else {
+                openCreateModal();
+            }
         }
 
         // Modal controls
@@ -2506,7 +2922,7 @@
                 const used = currentClientData.usedQuota || 0;
                 const max = currentClientData.maxLimit || 0;
                 if (used >= max) {
-                    alert(`Naabot mo na ang iyong quota limit (${used}/${max}). Makipag-ugnayan sa Super Admin para sa karagdagang activation codes.`);
+                    showIosToast(`Quota full na (${used}/${max}). Kontakin si Admin.`, '⚠️');
                     return;
                 }
             }
@@ -2545,17 +2961,17 @@
                 if (data.ok) {
                     closeCreateModal();
                     document.getElementById('createForm').reset();
-                    alert(`Tagumpay! Bagong 8-digit license code: ${data.license.code}`);
+                    showIosToast(`Bagong 8-digit code: ${data.license.code}`, '🎉');
                     if (data.client) {
                         currentClientData = data.client;
                         applyRoleUI();
                     }
                     fetchLicenses();
                 } else {
-                    alert('Error: ' + data.error);
+                    showIosToast('Error: ' + data.error, '❌');
                 }
             } catch (e) {
-                alert('Error: ' + e.message);
+                showIosToast('Error: ' + e.message, '❌');
             }
         }
 
@@ -2573,12 +2989,13 @@
                 const data = await res.json();
                 if (data.ok) {
                     closeEditModal();
+                    showIosToast('Na-save ang lisensya!', '✓');
                     fetchLicenses();
                 } else {
-                    alert('Error: ' + data.error);
+                    showIosToast('Error: ' + data.error, '❌');
                 }
             } catch (e) {
-                alert('Error: ' + e.message);
+                showIosToast('Error: ' + e.message, '❌');
             }
         }
 
@@ -2603,5 +3020,17 @@
             }
         }, 6000);
     </script>
+
+    <!-- iOS Mobile Floating Bottom Action Bar -->
+    <div class="mobile-bottom-bar" id="mobileBottomBar">
+        <div class="mobile-bottom-info">
+            <span id="mobileBottomRoleText" style="font-size:10px; font-weight:800; color:#8e8e93; letter-spacing:0.5px;">ZYN ACTIVATOR</span>
+            <span id="mobileBottomSubText" style="font-size:13px; font-weight:800; color:#0f172a;">Online Sync Active</span>
+        </div>
+        <button type="button" class="btn btn-mobile-action" id="btnMobileAction" onclick="handleMobileMainAction()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span id="btnMobileActionText">+ New Code</span>
+        </button>
+    </div>
 </body>
 </html>
