@@ -956,7 +956,10 @@ app.post('/api/admin/licenses/create', async (req, res) => {
         code = generateUnique8DigitCode(db);
     }
 
-    const days = parseInt(durationDays, 10);
+    let days = parseInt(durationDays, 10);
+    if (req.authRole === 'client') {
+        days = 7; // Reseller/client generation is strictly locked to 7 days
+    }
     const expiresAt = (days && days > 0) ? (now + days * 24 * 60 * 60 * 1000) : null;
 
     const newLic = {
@@ -1061,7 +1064,10 @@ app.post('/api/admin/licenses/:code/renew', async (req, res) => {
     const { code } = req.params;
     const { extendDays } = req.body || {};
     const parsedDays = parseInt(extendDays, 10);
-    const days = isNaN(parsedDays) ? 30 : parsedDays;
+    let days = isNaN(parsedDays) ? 30 : parsedDays;
+    if (req.authRole === 'client') {
+        days = 7; // Reseller/client renew is strictly locked to 7 days
+    }
 
     const db = loadDatabase();
     const lic = db.licenses.find(l => l.code === code);
