@@ -1597,19 +1597,22 @@
                     <input type="text" id="newClientName" class="form-control" placeholder="hal. Juan Dela Cruz (Mobile Legends Streamer)" required>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="groupDuration">
                     <label class="form-label">Subscription Plan / Duration</label>
                     <select id="newDuration" class="form-control">
                         <option value="30">30 Days (1 Buwan)</option>
-                        <option value="7">7 Days Trial</option>
+                        <option value="7">7 Days Access</option>
                         <option value="60">60 Days (2 Buwan)</option>
                         <option value="90">90 Days (3 Buwan)</option>
                         <option value="365">1 Year Access</option>
                         <option value="0">Lifetime Access (Walang Expiration)</option>
                     </select>
+                    <small id="resellerDurationNote" style="display:none; color:#4f46e5; font-size:11.5px; margin-top:5px; font-weight:700;">
+                        🔒 Reseller Account: Naka-lock sa 7 Days Access bawat activation code.
+                    </small>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="groupCustomCode">
                     <label class="form-label">Custom 8-Digit Code (Optional)</label>
                     <input type="text" id="newCustomCode" class="form-control" placeholder="Iwanang blank para sa auto-generate" maxlength="8">
                 </div>
@@ -2847,20 +2850,26 @@
         }
 
         async function quickRenewPrompt(code) {
-            const days = prompt('Ilang araw ang idaragdag sa lisensya? (hal. 30, 60, 365, o 0 para sa Lifetime)', '30');
-            if (days === null) return;
-            const num = parseInt(days, 10);
+            let num = 30;
+            if (currentRole === 'client') {
+                if (!confirm(`I-renew ng +7 days ang license #${code}?`)) return;
+                num = 7;
+            } else {
+                const days = prompt('Ilang araw ang idaragdag sa lisensya? (hal. 7, 30, 60, 365, o 0 para sa Lifetime)', '30');
+                if (days === null) return;
+                num = parseInt(days, 10);
+            }
             try {
                 const res = await adminFetch(`/api/admin/licenses/${code}/renew`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ extendDays: isNaN(num) ? 30 : num })
+                    body: JSON.stringify({ extendDays: isNaN(num) ? 7 : num })
                 });
                 const d = await res.json();
-                alert(d.message || 'Renewed!');
+                showIosToast(d.message || 'Renewed!', '✓');
                 fetchLicenses();
             } catch (e) {
-                alert('Action failed: ' + e.message);
+                showIosToast('Action failed: ' + e.message, '❌');
             }
         }
 
@@ -2868,9 +2877,10 @@
             if (!confirm(`Sigurado ka bang buburahin ang license #${code}?`)) return;
             try {
                 await adminFetch(`/api/admin/licenses/${code}`, { method: 'DELETE' });
+                showIosToast(`Nabura ang license #${code}`, '🗑️');
                 fetchLicenses();
             } catch (e) {
-                alert('Delete failed: ' + e.message);
+                showIosToast('Delete failed: ' + e.message, '❌');
             }
         }
 
@@ -2926,6 +2936,38 @@
                     return;
                 }
             }
+
+            const durSelect = document.getElementById('newDuration');
+            const note = document.getElementById('resellerDurationNote');
+            const customCodeGroup = document.getElementById('groupCustomCode');
+
+            if (currentRole === 'client') {
+                if (durSelect) {
+                    durSelect.innerHTML = `<option value="7" selected>7 Days Access</option>`;
+                    durSelect.disabled = true;
+                    durSelect.style.background = '#f1f5f9';
+                    durSelect.style.cursor = 'not-allowed';
+                }
+                if (note) note.style.display = 'block';
+                if (customCodeGroup) customCodeGroup.style.display = 'none';
+            } else {
+                if (durSelect) {
+                    durSelect.innerHTML = `
+                        <option value="30">30 Days (1 Buwan)</option>
+                        <option value="7">7 Days Trial</option>
+                        <option value="60">60 Days (2 Buwan)</option>
+                        <option value="90">90 Days (3 Buwan)</option>
+                        <option value="365">1 Year Access</option>
+                        <option value="0">Lifetime Access (Walang Expiration)</option>
+                    `;
+                    durSelect.disabled = false;
+                    durSelect.style.background = '#ffffff';
+                    durSelect.style.cursor = 'default';
+                }
+                if (note) note.style.display = 'none';
+                if (customCodeGroup) customCodeGroup.style.display = 'block';
+            }
+
             document.getElementById('createModal').classList.add('open');
             document.getElementById('newClientName').focus();
         }
